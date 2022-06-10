@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*- 
 """ 
 """ 
-from tomo_encoders.misc.feret_diameter import max_feret_dm
+
 import cupy as cp
 import numpy as np
 from tomo_encoders import Grid
@@ -15,7 +15,7 @@ from tifffile import imsave, imread
 import h5py
 from skimage.measure import marching_cubes
 from tomo_encoders.misc.feret_diameter import max_feret_dm
-#import pymesh
+import pymesh
 
 class Surface(dict):
     def __init__(self, vertices, faces, texture = None):
@@ -413,7 +413,7 @@ class Voids(dict):
         print(f"\tSTAT: 1/r value: {1/r_fac:.4g}")
         return p3d_sel, r_fac
 
-    def _void2mesh(self, void_id, tex_vals):
+    def _void2mesh(self, void_id, tex_vals, edge_thresh):
 
         void = self["x_voids"][void_id]
         spt = self["cpts"][void_id]
@@ -428,7 +428,7 @@ class Voids(dict):
         verts, faces, _, __ = marching_cubes(void, 0.5)
 
         ###Work on decimating voids###
-        #verts, faces, info = pymesh.collapse_short_edges_raw(verts, faces, 2)
+        verts, faces, info = pymesh.collapse_short_edges_raw(verts, faces, edge_thresh, preserve_feature = True)
 
         #####################################
 
@@ -480,7 +480,7 @@ class Voids(dict):
     
 
 
-    def export_void_mesh_with_texture(self, texture_key):
+    def export_void_mesh_with_texture(self, texture_key, edge_thresh = 1.0):
 
         '''export with texture, slower but vis with color coding
         '''
@@ -511,7 +511,7 @@ class Voids(dict):
 
 
         for iv in range(len(self)):
-            surf = self._void2mesh(iv, tex_vals)
+            surf = self._void2mesh(iv, tex_vals, edge_thresh = edge_thresh)
             if not np.any(surf["faces"]):
                 continue
             verts.append(surf["vertices"])
@@ -539,6 +539,7 @@ class Voids(dict):
         end_chkpt.record(); end_chkpt.synchronize(); t_chkpt = cp.cuda.get_elapsed_time(st_chkpt,end_chkpt)
         print(f"\tTIME: compute void mesh {t_chkpt/1000.0:.2f} secs")
         return surf
+
 
     def calc_max_feret_dm(self):
 
