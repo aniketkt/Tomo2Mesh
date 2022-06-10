@@ -3,7 +3,7 @@ from scipy.spatial.distance import pdist
 import itertools
 import matplotlib.pyplot as plt
 
-from tomo_encoders.misc.voxel_processing import edge_map
+from tomo2mesh.misc.voxel_processing import edge_map
 from scipy.spatial import ConvexHull
 
 

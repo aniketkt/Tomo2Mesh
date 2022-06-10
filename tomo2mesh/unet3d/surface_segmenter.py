@@ -16,8 +16,8 @@ import numpy as np
 # from tomopy import normalize, minus_log, angles, recon, circ_mask
 # from scipy.ndimage.filters import median_filter
 
-from tomo_encoders import Patches
-from tomo_encoders import DataFile
+from tomo2mesh import Patches
+from tomo2mesh import DataFile
 import tensorflow as tf
 from tensorflow.keras.models import load_model
 import functools
@@ -27,9 +27,9 @@ import time
 MAX_ITERS = 2000 # iteration max for find_patches(). Will raise warnings if count is exceeded.
 # Parameters for weighted cross-entropy and focal loss - alpha is higher than 0.5 to emphasize loss in "ones" or metal pixels.
 
-from tomo_encoders.neural_nets.keras_processor import Vox2VoxProcessor_fCNN
-from tomo_encoders.neural_nets.Unet3D import build_Unet_3D
-from tomo_encoders.misc.voxel_processing import _rescale_data, edge_map
+from tomo2mesh.neural_nets.keras_processor import Vox2VoxProcessor_fCNN
+from tomo2mesh.neural_nets.Unet3D import build_Unet_3D
+from tomo2mesh.misc.voxel_processing import _rescale_data, edge_map
 
 
 

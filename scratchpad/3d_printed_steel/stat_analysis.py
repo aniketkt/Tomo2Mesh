@@ -1,5 +1,5 @@
 import time
-from tomo_encoders import DataFile
+from tomo2mesh import DataFile
 import os
 import numpy as np
 import matplotlib.pyplot as plt
@@ -11,10 +11,10 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from scipy.ndimage import label
 
-from tomo_encoders.misc.voxel_processing import modified_autocontrast
+from tomo2mesh.misc.voxel_processing import modified_autocontrast
 from tomo_encoders.mesh_processing.vox2mesh import *
 from tomo_encoders.neural_nets.surface_segmenter import SurfaceSegmenter
-from tomo_encoders import Grid, Patches
+from tomo2mesh import Grid, Patches
 from tomo_encoders.labeling.detect_voids import export_voids
 from tomo_encoders.mesh_processing.void_params import _edge_map, calc_params, fit_ellipsoid
 

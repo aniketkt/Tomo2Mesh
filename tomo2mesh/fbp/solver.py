@@ -12,9 +12,9 @@ import h5py
 # from cupyx.scipy.fft import rfft, irfft, rfftfreq
 
 from cupy.fft import rfft, irfft, rfftfreq
-from tomo_encoders import Patches
-from tomo_encoders.reconstruction.recon import *
-from tomo_encoders.misc.voxel_processing import modified_autocontrast, cylindrical_mask
+from tomo2mesh import Patches
+from tomo2mesh.reconstruction.recon import *
+from tomo2mesh.misc.voxel_processing import modified_autocontrast, cylindrical_mask
 
 def solver(projs, theta, center, dark, flat, \
            apply_fbp = True, \

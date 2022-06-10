@@ -5,16 +5,16 @@
 
 import cupy as cp
 import numpy as np
-from tomo_encoders import Grid
+from tomo2mesh import Grid
 from cupyx.scipy.ndimage import label
 from scipy.ndimage import label as label_np
 from scipy.ndimage import find_objects
-from tomo_encoders.misc.voxel_processing import TimerGPU, TimerCPU
+from tomo2mesh.misc.voxel_processing import TimerGPU, TimerCPU
 import os
 from tifffile import imsave, imread
 import h5py
 from skimage.measure import marching_cubes
-from tomo_encoders.misc.feret_diameter import max_feret_dm
+from tomo2mesh.misc.feret_diameter import max_feret_dm
 import pymesh
 
 class Surface(dict):

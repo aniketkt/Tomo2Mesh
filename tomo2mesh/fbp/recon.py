@@ -13,12 +13,12 @@ import tensorflow as tf
 import tqdm
 from cupyx.scipy.fft import rfft, irfft, rfftfreq, get_fft_plan
 from cupyx.scipy.ndimage import gaussian_filter, median_filter
-from tomo_encoders import Patches, Grid
+from tomo2mesh import Patches, Grid
 from cupyx.scipy import ndimage
-from tomo_encoders.reconstruction.retrieve_phase import paganin_filter
-from tomo_encoders.reconstruction.cuda_kernels import rec_patch, rec_mask, rec_all
-from tomo_encoders.reconstruction.prep import fbp_filter, preprocess, calc_padding    
-from tomo_encoders.misc.voxel_processing import TimerGPU
+from tomo2mesh.reconstruction.retrieve_phase import paganin_filter
+from tomo2mesh.reconstruction.cuda_kernels import rec_patch, rec_mask, rec_all
+from tomo2mesh.reconstruction.prep import fbp_filter, preprocess, calc_padding    
+from tomo2mesh.misc.voxel_processing import TimerGPU
 from multiprocessing import Pool, Process
 def recon_all(projs, theta, center, nc, dark_flat = None):
 

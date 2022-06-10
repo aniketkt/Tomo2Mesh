@@ -3,24 +3,24 @@
 """ 
 """ 
 from operator import mod
-from tomo_encoders.misc.voxel_processing import modified_autocontrast, TimerGPU
-from tomo_encoders.reconstruction.recon import recon_patches_3d
+from tomo2mesh.misc.voxel_processing import modified_autocontrast, TimerGPU
+from tomo2mesh.reconstruction.recon import recon_patches_3d
 import cupy as cp
 import numpy as np
 from skimage.filters import threshold_otsu
-from tomo_encoders import Grid
-from tomo_encoders.reconstruction.cuda_kernels import rec_all
+from tomo2mesh import Grid
+from tomo2mesh.reconstruction.cuda_kernels import rec_all
 from cupyx.scipy.fft import rfft, irfft
-from tomo_encoders.reconstruction import retrieve_phase
-from tomo_encoders.tasks.digital_zoom import segment_otsu, cylindrical_mask, edge_map, get_values_cyl_mask
+from tomo2mesh.reconstruction import retrieve_phase
+from tomo2mesh.tasks.digital_zoom import segment_otsu, cylindrical_mask, edge_map, get_values_cyl_mask
 from cupyx.scipy import ndimage
-from tomo_encoders.misc.voxel_processing import modified_autocontrast
-from tomo_encoders.structures.voids import Voids
-from tomo_encoders.tasks.void_clustering import find_roi_voids, rank_voids_spherical, DBSCAN
+from tomo2mesh.misc.voxel_processing import modified_autocontrast
+from tomo2mesh.structures.voids import Voids
+from tomo2mesh.tasks.void_clustering import find_roi_voids, rank_voids_spherical, DBSCAN
 from cupyx.scipy.ndimage import label
 from epics import PV
-from tomo_encoders.structures.voids import Surface
-from tomo_encoders.misc.vis_vtk import update_vis_stream
+from tomo2mesh.structures.voids import Surface
+from tomo2mesh.misc.vis_vtk import update_vis_stream
 
 class VoidMapper():
     """Class for tomography reconstruction, segmentatiion and mapping of voids in a stream of raw projection data.

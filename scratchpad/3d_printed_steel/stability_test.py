@@ -1,7 +1,7 @@
 import time
 
 from pyrsistent import ny
-from tomo_encoders import DataFile
+from tomo2mesh import DataFile
 import os
 import numpy as np
 import sys
@@ -11,10 +11,10 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 import pandas as pd
 
-from tomo_encoders.misc.voxel_processing import modified_autocontrast
+from tomo2mesh.misc.voxel_processing import modified_autocontrast
 from tomo_encoders.mesh_processing.vox2mesh import *
 from tomo_encoders.neural_nets.surface_segmenter import SurfaceSegmenter
-from tomo_encoders import Grid, Patches
+from tomo2mesh import Grid, Patches
 from tomo_encoders.labeling.detect_voids import export_voids
 from tomo_encoders.mesh_processing.void_params import *
 

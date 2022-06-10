@@ -12,14 +12,14 @@ import glob
 import numpy as np
 
 
-from tomo_encoders import Patches
-from tomo_encoders import DataFile
+from tomo2mesh import Patches
+from tomo2mesh import DataFile
 import tensorflow as tf
 from tensorflow.keras.models import load_model
 import functools
 import cupy as cp
 import time
-from tomo_encoders.misc.voxel_processing import _rescale_data, _find_min_max
+from tomo2mesh.misc.voxel_processing import _rescale_data, _find_min_max
 
 
 class GenericKerasProcessor():

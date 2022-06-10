@@ -4,7 +4,7 @@ import sys
 sys.path.append('/data01/AMPolyCalc/code')
 from rw_utils import read_raw_data_1X, save_path
 from void_mapping import void_map_gpu
-from tomo_encoders.misc import viewer
+from tomo2mesh.misc import viewer
 
 import cupy as cp
 from params import pixel_size_1X, voids_path

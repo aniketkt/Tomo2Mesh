@@ -3,13 +3,13 @@
 """ 
 """ 
 from operator import mod
-from tomo_encoders.misc.voxel_processing import TimerGPU, edge_map, modified_autocontrast, get_values_cyl_mask
-from tomo_encoders.reconstruction.recon import recon_patches_3d
+from tomo2mesh.misc.voxel_processing import TimerGPU, edge_map, modified_autocontrast, get_values_cyl_mask
+from tomo2mesh.reconstruction.recon import recon_patches_3d
 import cupy as cp
 import numpy as np
-from tomo_encoders import Grid
-from tomo_encoders.reconstruction.recon import recon_all_gpu, recon_all
-from tomo_encoders.structures.voids import Voids
+from tomo2mesh import Grid
+from tomo2mesh.reconstruction.recon import recon_all_gpu, recon_all
+from tomo2mesh.structures.voids import Voids
 from skimage.filters import threshold_otsu
 from cupyx.scipy import ndimage
 
