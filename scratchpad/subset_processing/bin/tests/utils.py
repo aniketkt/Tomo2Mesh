@@ -21,11 +21,10 @@ radius_around_void_um = 1000.0 # um
 
 
 # U-net parameters
-sys.path.append('/home/atekawade/TomoEncoders/scratchpad/voids_paper/configs')
+sys.path.append('/data01/Tomo2Mesh/scratchpad/subset_processing/configs')
 from params import model_path, get_model_params
 model_tag = "M_a07"
 model_names = {"segmenter" : "segmenter_Unet_%s"%model_tag}
-
 
 
 ## file names
@@ -33,8 +32,10 @@ raw_fname = '/data02/MyArchive/aisteer_3Dencoders/tmp_data/mosaic_raw/all_layers
 raw_fname_b2 = '/data02/MyArchive/aisteer_3Dencoders/tmp_data/mosaic_raw/all_layers_b2_16bit.hdf5'
 voids_dir = '/data02/MyArchive/aisteer_3Dencoders/tmp_data/voids_data'
 data_output = '/data02/MyArchive/aisteer_3Dencoders/tmp_data/output_vis'
-time_logs = '/home/atekawade/Dropbox/Arg/transfers/runtime_plots/voids_paper/time_logs'
-ply_dir = '/home/atekawade/Dropbox/Arg/transfers/runtime_plots/voids_paper/ply'
+time_logs = '/data02/MyArchive/aisteer_3Dencoders/tmp_data/time_logs'
+ply_dir = '/data02/MyArchive/aisteer_3Dencoders/tmp_data/ply'
+
+
 ply_subset = os.path.join(ply_dir, 'subset.ply')
 ply_coarse = os.path.join(ply_dir, 'coarse.ply')
 

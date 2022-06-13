@@ -12,8 +12,6 @@ import glob
 import numpy as np
 
 
-from tomo2mesh import Patches
-from tomo2mesh import DataFile
 import tensorflow as tf
 from tensorflow.keras.models import load_model
 import functools

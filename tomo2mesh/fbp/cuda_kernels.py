@@ -11,12 +11,6 @@ import time
 import tensorflow as tf
 # from cupyx.scipy.fft import rfft, irfft, rfftfreq
 
-from cupyx.scipy.fft import rfft, irfft, rfftfreq, get_fft_plan
-from cupyx.scipy.ndimage import gaussian_filter
-from tomo2mesh import Patches, Grid
-from cupyx.scipy import ndimage
-from tomo2mesh.reconstruction.retrieve_phase import paganin_filter
-
 
 source = """
 extern "C" {

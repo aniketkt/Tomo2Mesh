@@ -222,7 +222,7 @@ class Grid(dict):
     def copy(self):
         return Grid(self.vol_shape, initialize_by = "data", \
                        points = self.points.copy(),\
-                       widths = int(self.wd))
+                       width = int(self.wd))
 
     def select_by_range(self, s_sel):
 

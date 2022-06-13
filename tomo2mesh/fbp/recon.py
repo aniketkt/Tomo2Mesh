@@ -13,11 +13,11 @@ import tensorflow as tf
 import tqdm
 from cupyx.scipy.fft import rfft, irfft, rfftfreq, get_fft_plan
 from cupyx.scipy.ndimage import gaussian_filter, median_filter
-from tomo2mesh import Patches, Grid
+from tomo2mesh import Grid
 from cupyx.scipy import ndimage
-from tomo2mesh.reconstruction.retrieve_phase import paganin_filter
-from tomo2mesh.reconstruction.cuda_kernels import rec_patch, rec_mask, rec_all
-from tomo2mesh.reconstruction.prep import fbp_filter, preprocess, calc_padding    
+from tomo2mesh.fbp.retrieve_phase import paganin_filter
+from tomo2mesh.fbp.cuda_kernels import rec_patch, rec_mask, rec_all
+from tomo2mesh.fbp.prep import fbp_filter, preprocess, calc_padding    
 from tomo2mesh.misc.voxel_processing import TimerGPU
 from multiprocessing import Pool, Process
 def recon_all(projs, theta, center, nc, dark_flat = None):
@@ -138,10 +138,10 @@ def recon_patches_3d(projs, theta, center, p3d, apply_fbp = True, TIMEIT = False
     memory_pool = cp.cuda.MemoryPool()
     cp.cuda.set_allocator(memory_pool.malloc)
     device = cp.cuda.Device()
-    stream = cp.cuda.Stream()
+    
     z_pts = np.unique(p3d.points[:,0])
     ntheta, nc, n = projs.shape[0], p3d.wd, projs.shape[2]
-    with stream:
+    with cp.cuda.Stream() as stream:
         data = cp.empty((ntheta, nc, n), dtype = cp.float32)
         theta = cp.array(theta, dtype = cp.float32)
         center = cp.float32(center)
@@ -168,12 +168,14 @@ def recon_patches_3d(projs, theta, center, p3d, apply_fbp = True, TIMEIT = False
         cpts_all.append(cpts.copy())
         cpts[:,0] = 0
         
-        with stream:
-            # COPY DATA TO GPU
-            timer.tic()
+        # COPY DATA TO GPU
+        timer.tic()
+        with cp.cuda.Stream() as stream:
             data.set(projs[:,z_pt:z_pt+nc,:].astype(np.float32))
-            t_cpu2gpu = timer.toc()
-            
+            stream.synchronize()
+        t_cpu2gpu = timer.toc()
+        
+        with cp.cuda.Stream() as stream:
             if dark_flat is not None:
                 dark = cp.array(dark_flat[0][z_pt:z_pt+nc,...])
                 flat = cp.array(dark_flat[1][z_pt:z_pt+nc,...])
@@ -194,22 +196,23 @@ def recon_patches_3d(projs, theta, center, p3d, apply_fbp = True, TIMEIT = False
             data[:] = irfft(data0, axis=2)[...,pad_left:-pad_right]
         t_filt = timer.toc()
             
-        with stream:
+        with cp.cuda.Stream() as stream:
             # BACK-PROJECTION
             t_mask = make_mask(obj_mask, cpts, p3d.wd)
-            t_rec = rec_mask(obj_mask, data, theta, center)
+            t_bp = rec_mask(obj_mask, data, theta, center)
             stream.synchronize()
         
         # EXTRACT PATCHES AND SEND TO CPU
         if segmenter is not None:
             # do segmentation
+
             xchunk = extract_segmented(obj_mask, cpts, p3d.wd, segmenter, segmenter_batch_size, rec_min_max)
             # xchunk = extract_segmented_cpu(obj_mask, cpts, p3d.wd, segmenter, segmenter_batch_size, rec_min_max)
-            times.append([ntheta, nc, n, t_cpu2gpu, t_filt, t_mask, t_rec])
+            times.append([ntheta, nc, n, t_cpu2gpu, t_filt, t_mask, t_bp])
             pass
         else:
             xchunk, t_gpu2cpu = extract_from_mask(obj_mask, cpts, p3d.wd)
-            times.append([ntheta, nc, n, t_cpu2gpu, t_filt, t_mask, t_rec, t_gpu2cpu])
+            times.append([ntheta, nc, n, t_cpu2gpu, t_filt, t_mask, t_bp, t_gpu2cpu])
 
 
         # APPEND AND GO TO NEXT CHUNK
@@ -220,7 +223,8 @@ def recon_patches_3d(projs, theta, center, p3d, apply_fbp = True, TIMEIT = False
 
     device.synchronize()
     del obj_mask, data, theta, center, data_padded, data0, t, wfilter    
-    cp.fft.config.clear_plan_cache(); memory_pool.free_all_blocks()    
+    # cp.fft.config.clear_plan_cache()
+    memory_pool.free_all_blocks()    
     cpts_all = np.concatenate(cpts_all, axis = 0)
     x = np.concatenate(x, axis = 0)
     
@@ -270,7 +274,7 @@ def extract_segmented(obj_mask, cpts, wd, segmenter, batch_size, rec_min_max):
     memory_pool = cp.cuda.MemoryPool()
     cp.cuda.set_allocator(memory_pool.malloc)
     # cp.cuda.set_allocator(cp.cuda.MemoryPool(cp.cuda.malloc_managed).malloc)
-
+    timer_seg = TimerGPU("ms")
     stream = cp.cuda.Stream()
     yp = cp.empty((batch_size, wd, wd, wd, 1), dtype = cp.float32)
 
@@ -287,13 +291,18 @@ def extract_segmented(obj_mask, cpts, wd, segmenter, batch_size, rec_min_max):
             batch_is_full = (ib == batch_size) # is batch full?
             end_of_chunk = (idx == len(cpts) - 1) # are we at the end of the z-chunk?
             if batch_is_full or end_of_chunk:
+                timer_seg.tic()
                 yp[:] = cp.clip(yp, *rec_min_max)
                 min_val, max_val = rec_min_max
                 yp[:] = (yp - min_val) / (max_val - min_val)
                 # use DLPack here as yp is cupy array                
                 cap = yp.toDlpack()
                 yp_in = tf.experimental.dlpack.from_dlpack(cap)
+                
                 yp_cpu = np.round(segmenter.models["segmenter"](yp_in)).astype(np.uint8)
+                t_ = timer_seg.toc()
+                t_ = t_/np.prod(yp_cpu.shape)*1.0e6
+                # print(f"Unet time per voxel: {t_:.2f} ns")
                 
                 sub_vols.append(yp_cpu[:ib,...,0])
                 ib = 0
@@ -342,20 +351,6 @@ def extract_segmented_cpu(obj_mask, cpts, wd, segmenter, batch_size, rec_min_max
         ib+=1
     sub_vols = np.concatenate(sub_vols, axis = 0)
     return sub_vols
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

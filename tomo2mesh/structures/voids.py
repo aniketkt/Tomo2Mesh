@@ -559,4 +559,36 @@ class Voids(dict):
         
 
         
+# offset = Y_motor_pos/pixel_size_1X
+
+class VoidLayers(Voids):
+
+    def __init__(self):
+
+        pass
+
+    def add_layer(self, voids, offset):
+
+        '''
+        
+        
+        '''
+        # outside the function: offset = Y_motor_pos/pixel_size_1X
+
+        # self["x_voids"] += [voids["x_voids"][ii] for ii in idxs]
+        # self["sizes"] = self["sizes"][idxs]
+        # self["cents"] = self["cents"][idxs]
+        # self["cpts"] = self["cpts"][idxs]
+        # self["s_voids"] = [self["s_voids"][ii] for ii in idxs]
+
+        # if "max_feret" in self.keys():
+        #     self["max_feret"]["dia"] = self["max_feret"]["dia"][idxs]
+        #     self["max_feret"]["eq_sph"] = self["max_feret"]["eq_sph"][idxs]
+        #     self["max_feret"]["norm_dia"] = self["max_feret"]["norm_dia"][idxs]
+        #     self["max_feret"]["theta"] = self["max_feret"]["theta"][idxs]
+        #     self["max_feret"]["phi"] = self["max_feret"]["phi"][idxs]
+
+
+
+        return
             

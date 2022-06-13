@@ -16,19 +16,20 @@ import numpy as np
 # from tomopy import normalize, minus_log, angles, recon, circ_mask
 # from scipy.ndimage.filters import median_filter
 
-from tomo2mesh import Patches
+from tomo2mesh.structures.patches import Patches
 from tomo2mesh import DataFile
 import tensorflow as tf
 from tensorflow.keras.models import load_model
 import functools
 import cupy as cp
 import time
+from tomo2mesh.misc.voxel_processing import TimerCPU, TimerGPU
 
 MAX_ITERS = 2000 # iteration max for find_patches(). Will raise warnings if count is exceeded.
 # Parameters for weighted cross-entropy and focal loss - alpha is higher than 0.5 to emphasize loss in "ones" or metal pixels.
 
-from tomo2mesh.neural_nets.keras_processor import Vox2VoxProcessor_fCNN
-from tomo2mesh.neural_nets.Unet3D import build_Unet_3D
+from tomo2mesh.unet3d.keras_processor import Vox2VoxProcessor_fCNN
+from tomo2mesh.unet3d.Unet3D import build_Unet_3D
 from tomo2mesh.misc.voxel_processing import _rescale_data, edge_map
 
 
@@ -250,7 +251,6 @@ class SurfaceSegmenter(Vox2VoxProcessor_fCNN):
         
         '''
         assert x.ndim == 5, "x must be 5-dimensional (batch_size, nz, ny, nx, 1)."
-        
         t0 = time.time()
 #         print("call to predict_patches, len(x) = %i, shape = %s, chunk_size = %i"%(len(x), str(x.shape[1:-1]), chunk_size))
         nb = len(x)
@@ -280,12 +280,13 @@ class SurfaceSegmenter(Vox2VoxProcessor_fCNN):
                                   ((0,padding), (0,0), \
                                    (0,0), (0,0), (0,0)), mode = 'edge')
                 
-                x_out = self.models[model_key].predict(x_in)
+                x_out = self.models[model_key](x_in)
 
                 if k == nchunks -1:
                     x_out = x_out[:-padding,...]
             else:
-                x_out = self.models[model_key].predict(x_in)
+                x_out = self.models[model_key](x_in)
+                
             out_arr[sb,...] = x_out
         
         out_arr = np.round(out_arr).astype(np.uint8)
@@ -335,16 +336,17 @@ class SurfaceSegmenter(Vox2VoxProcessor_fCNN):
             
     def test_speeds(self, chunk_size, n_reps = 3, input_size = None, model_key = "segmenter"):
         
+        timer_unet = TimerGPU("secs")
         if input_size is None:
             input_size = (64,64,64)
         for jj in range(n_reps):
             x = np.random.uniform(0, 1, tuple([chunk_size] + list(input_size) + [1])).astype(np.float32)
-            t0 = time.time()
-            y_pred = self.predict_patches(model_key, x, chunk_size, None, min_max = (-1,1))
+            timer_unet.tic()
+            y_pred = self.models[model_key](x)
+            t_ = timer_unet.toc()
+            print(f"Unet time per voxel: {t_/(np.prod(y_pred.shape))*1.0e9:.2f} ns")
 
-            t_unit = (time.time() - t0)*1000.0/len(x)
-            print(f"inf. time per patch {input_size} = {t_unit:.2f} ms, nb = {len(x)}")
-            print(f"inf. time per voxel {(t_unit/(np.prod(input_size))*1.0e6):.2f} ns")
+
             print("\n")
             
         return

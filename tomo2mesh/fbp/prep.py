@@ -12,11 +12,8 @@ import tensorflow as tf
 # from cupyx.scipy.fft import rfft, irfft, rfftfreq
 
 from cupyx.scipy.fft import rfft, irfft, rfftfreq, get_fft_plan
-from cupyx.scipy.ndimage import gaussian_filter
-from tomo2mesh import Patches, Grid
 from cupyx.scipy import ndimage
-from tomo2mesh.reconstruction.retrieve_phase import paganin_filter
-from tomo2mesh.reconstruction.cuda_kernels import rec_patch, rec_mask, rec_all
+from tomo2mesh.fbp.retrieve_phase import paganin_filter
 from tomo2mesh.misc.voxel_processing import TimerGPU
 def calc_padding(data_shape):
     # padding, make sure the width of projection is divisible by four after padding
