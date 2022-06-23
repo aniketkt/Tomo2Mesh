@@ -90,7 +90,7 @@ def recon_all_gpu(projs, theta, center, obj, dark_flat = None):
         rec_all(obj, data, theta, center)
         stream_copy.synchronize()
     del data
-    cp.fft.config.clear_plan_cache(); memory_pool.free_all_blocks()    
+    memory_pool.free_all_blocks()    
     device.synchronize()
     # _ = timer.toc(f"reconstruction shape {obj.shape}, median filter {median_kernel}, gaussian filter {blur_sigma}")
     
@@ -125,11 +125,12 @@ def recon_all_gpu0(projs, theta, center, obj):
             stream.synchronize()
 
     del data
-    cp.fft.config.clear_plan_cache(); memory_pool.free_all_blocks()    
+    memory_pool.free_all_blocks()    
     device.synchronize()
     # _ = timer.toc(f"reconstruction shape {obj.shape}, median filter {median_kernel}, gaussian filter {blur_sigma}")
     
     return obj
+
 
 
 def recon_patches_3d(projs, theta, center, p3d, apply_fbp = True, TIMEIT = False, segmenter = None, segmenter_batch_size = 256, dark_flat = None, rec_min_max = None):
@@ -146,7 +147,7 @@ def recon_patches_3d(projs, theta, center, p3d, apply_fbp = True, TIMEIT = False
         theta = cp.array(theta, dtype = cp.float32)
         center = cp.float32(center)
         obj_mask = cp.empty((nc, n, n), dtype = cp.float32)
-        
+    
         # fft stuff        
         pad_left, pad_right = calc_padding(data.shape)    
         data_padded = cp.empty((ntheta,nc,n+pad_left+pad_right), dtype = cp.float32)
@@ -155,7 +156,7 @@ def recon_patches_3d(projs, theta, center, p3d, apply_fbp = True, TIMEIT = False
         plan_inv = get_fft_plan(rfft(data_padded,axis=2), axes=2, value_type='C2R')
         t = rfftfreq(data_padded.shape[2])
         wfilter = t.astype(cp.float32) #* (1 - t * 2)**3  # parzen
-        stream.synchronize()
+    
 
     x = []
     times = []
@@ -169,22 +170,23 @@ def recon_patches_3d(projs, theta, center, p3d, apply_fbp = True, TIMEIT = False
         cpts[:,0] = 0
         
         # COPY DATA TO GPU
+        stream = cp.cuda.Stream()
         timer.tic()
-        with cp.cuda.Stream() as stream:
+        with stream:
             data.set(projs[:,z_pt:z_pt+nc,:].astype(np.float32))
-            stream.synchronize()
+        stream.synchronize()
         t_cpu2gpu = timer.toc()
         
-        with cp.cuda.Stream() as stream:
+        stream = cp.cuda.Stream()
+        with stream:
             if dark_flat is not None:
                 dark = cp.array(dark_flat[0][z_pt:z_pt+nc,...])
                 flat = cp.array(dark_flat[1][z_pt:z_pt+nc,...])
                 t_prep = preprocess(data, dark, flat)
-            stream.synchronize()
+        stream.synchronize()
 
         # FBP FILTER
         timer.tic()
-
         with plan_fwd:
             # filter mask and fft
             #(1 - t * 2)**3  # parzen
@@ -196,16 +198,16 @@ def recon_patches_3d(projs, theta, center, p3d, apply_fbp = True, TIMEIT = False
             data[:] = irfft(data0, axis=2)[...,pad_left:-pad_right]
         t_filt = timer.toc()
             
-        with cp.cuda.Stream() as stream:
+        stream = cp.cuda.Stream()
+        with stream:
             # BACK-PROJECTION
             t_mask = make_mask(obj_mask, cpts, p3d.wd)
             t_bp = rec_mask(obj_mask, data, theta, center)
-            stream.synchronize()
+        stream.synchronize()
         
         # EXTRACT PATCHES AND SEND TO CPU
         if segmenter is not None:
             # do segmentation
-
             xchunk = extract_segmented(obj_mask, cpts, p3d.wd, segmenter, segmenter_batch_size, rec_min_max)
             # xchunk = extract_segmented_cpu(obj_mask, cpts, p3d.wd, segmenter, segmenter_batch_size, rec_min_max)
             times.append([ntheta, nc, n, t_cpu2gpu, t_filt, t_mask, t_bp])
@@ -223,7 +225,7 @@ def recon_patches_3d(projs, theta, center, p3d, apply_fbp = True, TIMEIT = False
 
     device.synchronize()
     del obj_mask, data, theta, center, data_padded, data0, t, wfilter    
-    # cp.fft.config.clear_plan_cache()
+    
     memory_pool.free_all_blocks()    
     cpts_all = np.concatenate(cpts_all, axis = 0)
     x = np.concatenate(x, axis = 0)
@@ -235,7 +237,6 @@ def recon_patches_3d(projs, theta, center, p3d, apply_fbp = True, TIMEIT = False
         return x, p3d, np.asarray(times)
     else:
         return x, p3d
-
 
 def extract_from_mask(obj_mask, cpts, wd):
     

@@ -16,6 +16,7 @@ import h5py
 from skimage.measure import marching_cubes
 from tomo2mesh.misc.feret_diameter import max_feret_dm
 import pymesh
+from tomo2mesh.misc.num_density import num_density
 
 class Surface(dict):
     def __init__(self, vertices, faces, texture = None):
@@ -143,12 +144,15 @@ class Voids(dict):
             if np.any(self["x_boundary"]):
                 hf.create_dataset("x_boundary", data = np.asarray(self["x_boundary"]))
 
-            if "max_feret_dia" in self.keys():
+            if "max_feret" in self.keys():
                 hf.create_dataset("max_feret/dia", data = self["max_feret"]["dia"])
                 hf.create_dataset("max_feret/eq_sph", data = self["max_feret"]["eq_sph"])
                 hf.create_dataset("max_feret/norm_dia", data = self["max_feret"]["norm_dia"])
                 hf.create_dataset("max_feret/theta", data = self["max_feret"]["theta"])
                 hf.create_dataset("max_feret/phi", data = self["max_feret"]["phi"])
+
+            if "number_density" in self.keys():
+                hf.create_dataset("number_density", data = self["number_density"])
             
         # # write ply mesh of each void into folder (if available)
         # if np.any(self["surfaces"]):
@@ -182,13 +186,16 @@ class Voids(dict):
                 self["x_boundary"] = []
 
 
-            if "max_feret_dia" in hf.keys():
+            if "max_feret" in hf.keys():
                 self["max_feret"] = {}
                 self["max_feret"]["dia"] = np.asarray(hf["max_feret/dia"])
                 self["max_feret"]["eq_sph"] = np.asarray(hf["max_feret/eq_sph"])
                 self["max_feret"]["norm_dia"] = np.asarray(hf["max_feret/norm_dia"])
                 self["max_feret"]["theta"] = np.asarray(hf["max_feret/theta"])
                 self["max_feret"]["phi"] = np.asarray(hf["max_feret/phi"])
+
+            if "number_density" in hf.keys():
+                self['number_density'] = np.asarray(hf["number_density"])
 
 
 
@@ -198,6 +205,50 @@ class Voids(dict):
             self["x_voids"].append(imread(f_))
 
         return self
+
+
+
+    # def copy_from(self, voids):
+
+    #     self.vol_shape = voids.shape
+    #     self.b = voids.b
+    #     self["sizes"] = 
+    #     self["cents"] = 
+    #     self["cpts"] = 
+
+    #     self["s_voids"] = voids["s_voids"]
+
+    #         if "x_boundary" in hf.keys():
+    #             self["x_boundary"] = np.asarray(hf["x_boundary"][:])                
+    #         else:
+    #             self["x_boundary"] = []
+
+
+    #         if "max_feret" in hf.keys():
+    #             self["max_feret"] = {}
+    #             self["max_feret"]["dia"] = np.asarray(hf["max_feret/dia"])
+    #             self["max_feret"]["eq_sph"] = np.asarray(hf["max_feret/eq_sph"])
+    #             self["max_feret"]["norm_dia"] = np.asarray(hf["max_feret/norm_dia"])
+    #             self["max_feret"]["theta"] = np.asarray(hf["max_feret/theta"])
+    #             self["max_feret"]["phi"] = np.asarray(hf["max_feret/phi"])
+
+    #         if "number_density" in hf.keys():
+    #             self['number_density'] = np.asarray(hf["number_density"])
+
+
+
+    #     flist = sorted(glob.glob(os.path.join(fpath,"voids", "*.tiff")))
+    #     self["x_voids"] = []
+    #     for f_ in flist:
+    #         self["x_voids"].append(imread(f_))
+
+    #     return
+
+
+
+
+
+
 
     def import_from_grid(self, voids_b, x_grid, p_grid):
 
@@ -294,8 +345,9 @@ class Voids(dict):
             
             if not np.all(np.clip(ept-cpt-self.dust_thresh,0,None)):
                 continue
-            s = tuple([slice(max(cpt[i3]-self.pad_bb,0), min(ept[i3]+self.pad_bb,self.vol_shape[i3])) for i3 in range(3)])
-            
+            cpt = np.maximum(cpt-self.pad_bb, 0)
+            ept = np.minimum(ept+self.pad_bb, np.asarray(self.vol_shape))
+            s = tuple([slice(cpt[i3], ept[i3]) for i3 in range(3)])
             void = (V_lab[s] == idx+1)
             if idx + 1 == boundary_id:
                 self["x_boundary"] = void.copy()
@@ -330,7 +382,34 @@ class Voids(dict):
             self["max_feret"]["theta"] = self["max_feret"]["theta"][idxs]
             self["max_feret"]["phi"] = self["max_feret"]["phi"][idxs]
         
+        if "number_density" in self.keys():
+            self["number_density"] = self["number_density"][idxs]
+
         return
+
+    def select_by_z_coordinate(self, z_pt):
+
+        idxs = np.arange(len(self))
+        
+        cond_list = np.asarray([1 if self["cents"][:,0][idx] < z_pt else 0 for idx in idxs])
+        
+        idxs = idxs[cond_list == 1]
+        self.select_by_indices(idxs)
+        
+        return
+
+
+    def select_z_slab(self, z_start, z_end):
+
+        idxs = np.arange(len(self))
+        cond_list = np.asarray([1 if ((self["cents"][:,0][idx] >= z_start) & (self["cents"][:,0][idx] <= z_end))  else 0 for idx in idxs])
+        
+        idxs = idxs[cond_list == 1]
+        self.select_by_indices(idxs)
+        
+        return
+
+
 
     def select_by_size(self, size_thresh_um, pixel_size_um = 1.0, sel_type = "geq"):
         
@@ -427,8 +506,6 @@ class Voids(dict):
         # try skimage measure
         verts, faces, _, __ = marching_cubes(void, 0.5)
 
-        ###Work on decimating voids###
-        verts, faces, info = pymesh.collapse_short_edges_raw(verts, faces, edge_thresh, preserve_feature = True)
 
         #####################################
 
@@ -448,6 +525,10 @@ class Voids(dict):
         # if b > 1, scale up the size
         verts *= (self.b)
 
+        ###Work on decimating voids###
+        if edge_thresh > 0:
+            verts, faces, info = pymesh.collapse_short_edges_raw(verts, faces, edge_thresh, preserve_feature = True)
+        
         # set texture
         texture = np.empty((len(verts),3), dtype = np.float32)
         texture[:,0] = float(tex_vals[void_id,0])
@@ -495,8 +576,8 @@ class Voids(dict):
         if texture_key == "sizes":
             tex_vals = np.empty((len(self),3))
             tex_vals[:,0] = np.log(self["sizes"]+1.0e-12) #255 #void_id
-            texture[:,1] = 255
-            texture[:,2] = 255
+            tex_vals[:,1] = 255
+            tex_vals[:,2] = 255
             
         elif "distance" in texture_key:
             raise ValueError("not implemented")
@@ -508,6 +589,17 @@ class Voids(dict):
             tex_vals[:,0] = self[texture_key]["norm_dia"].copy()
             tex_vals[:,1] = self[texture_key]["theta"].copy()            
             tex_vals[:,2] = self[texture_key]["phi"].copy()
+
+        elif "number_density" in texture_key:
+            if "number_density" not in self.keys():
+                raise ValueError("number density is not computed")
+            tex_vals = np.empty((len(self),3))
+            tex_vals[:,0] = self[texture_key]
+            tex_vals[:,1] = self["sizes"]
+            tex_vals[:,2] = self["max_feret"]["norm_dia"] if "max_feret" in self.keys() else 0.0
+
+
+
 
 
         for iv in range(len(self)):
@@ -555,40 +647,77 @@ class Voids(dict):
         timer.toc("calculate max feret diameter")
         return
 
+    def calc_number_density(self, radius_val):
+        timer = TimerCPU("secs")
+        timer.tic()
+        arr = num_density(self["cents"], radius_val)
+        self['number_density'] = arr
+        timer.toc("calculate number density")
+        return
 
         
 
-        
-# offset = Y_motor_pos/pixel_size_1X
+
+
 
 class VoidLayers(Voids):
 
     def __init__(self):
 
-        pass
-
-    def add_layer(self, voids, offset):
-
-        '''
-        
-        
-        '''
-        # outside the function: offset = Y_motor_pos/pixel_size_1X
-
-        # self["x_voids"] += [voids["x_voids"][ii] for ii in idxs]
-        # self["sizes"] = self["sizes"][idxs]
-        # self["cents"] = self["cents"][idxs]
-        # self["cpts"] = self["cpts"][idxs]
-        # self["s_voids"] = [self["s_voids"][ii] for ii in idxs]
-
-        # if "max_feret" in self.keys():
-        #     self["max_feret"]["dia"] = self["max_feret"]["dia"][idxs]
-        #     self["max_feret"]["eq_sph"] = self["max_feret"]["eq_sph"][idxs]
-        #     self["max_feret"]["norm_dia"] = self["max_feret"]["norm_dia"][idxs]
-        #     self["max_feret"]["theta"] = self["max_feret"]["theta"][idxs]
-        #     self["max_feret"]["phi"] = self["max_feret"]["phi"][idxs]
-
-
-
+        self["sizes"] = []
+        self["cents"] = []
+        self["cpts"] = []
+        self["s_voids"] = []
+        self["x_voids"] = []
+        self["x_boundary"] = []
+        self["surfaces"] = []
+        self.vol_shape = (1,1,1)
+        self.b = 1
+        self.pad_bb = 1
+        self.marching_cubes_algo = "skimage"#"vedo"
         return
+        
+
+    def add_layer(self, voids, z_max):
+
+        '''
+        
+        
+        '''
+        if len(self["x_voids"]) == 0: # this is the first layer
+            self["x_voids"] = voids["x_voids"]
+            self["sizes"]  = voids["sizes"]
+            self["cents"] = voids["cents"]
+            self["cpts"] = voids["cpts"]
+            self.b = voids.b
+        else: # just append new layer
+            self["x_voids"] += voids["x_voids"]
+            self["sizes"] = np.concatenate([self["sizes"], voids["sizes"]], axis = 0)
+            self["cents"] = np.concatenate([self["cents"], voids["cents"]+[z_max,0,0]], axis = 0)
+            self["cpts"] = np.concatenate([self["cpts"], voids["cpts"]+[z_max,0,0]], axis = 0)
+        
+        for s_void in voids["s_voids"]:
+            sz, sy, sx = s_void
+            sz = slice(s_void[0].start + z_max, s_void[0].stop + z_max)
+            s_void = (sz, sy, sx)
+            self["s_voids"].append(s_void)
+        
+        # if "max_feret" in self.keys():
+            # pass
+        # if "number_density" in self.keys():
+        #     self["number_density"] = np.concatenate(self["number_density"], voids["number_density"], axis = 0)
+
+        return 
+            
+
+
+    def import_from_grid(self):
+        raise NotImplementedError()
+        
+    def count_voids(self):
+        raise NotImplementedError()
+
+    
+        
+
             

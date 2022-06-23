@@ -1,6 +1,6 @@
-from tomo2mesh.reconstruction.cuda_kernels import rec_all
-from tomo2mesh.reconstruction.retrieve_phase import paganin_filter
-from tomo2mesh.reconstruction.prep import fbp_filter
+from tomo2mesh.fbp.cuda_kernels import rec_all
+from tomo2mesh.fbp.retrieve_phase import paganin_filter
+from tomo2mesh.fbp.prep import fbp_filter
 from cupyx.scipy import ndimage
 import cupy as cp
 import numpy as np
@@ -8,7 +8,7 @@ from params import *
 import numexpr as ne
 
 
-def preprocess(data, dark, flat, pixel_size):
+def preprocess(data, dark, flat, pixel_size, apply_pg = True):
     
     data[:] = (data-dark)/(cp.maximum(flat-dark, 1.0e-6))                
     
@@ -16,23 +16,30 @@ def preprocess(data, dark, flat, pixel_size):
     # ids = cp.where(cp.abs(fdata-data)>0.5*cp.abs(fdata))
     # data[ids] = fdata[ids]        
     
-    data[:] = paganin_filter(data, alpha = pg_alpha, energy = energy, pixel_size = pixel_size, dist = detector_dist)
+    if apply_pg:
+        data[:] = paganin_filter(data, alpha = pg_alpha, energy = energy, pixel_size = pixel_size, dist = detector_dist)
 
     data[:] = -cp.log(cp.maximum(data,1.0e-6))
     
     return
 
-def recon_slice(projs, theta, center, dark, flat, sino_pos, pixel_size):
+def recon_slice(projs, theta, center, dark, flat, sino_pos, pixel_size, pg_pad = 10):
 
     ntheta, nz, n = projs.shape
-    pg_pad = 10
-    sino_slice = slice(int(sino_pos*nz)-pg_pad, int(sino_pos*nz) + 1 + pg_pad)
+    
+    if type(sino_pos) is float:
+        sino_pos = int(sino_pos*nz)
+    elif type(sino_pos) is int:
+        print(sino_pos)
+    else:
+        raise ValueError("")
+    sino_slice = slice(sino_pos-pg_pad, sino_pos + 1 + pg_pad)
     
     theta = cp.array(theta, dtype = cp.float32)
     center = cp.float32(center)
     dark = cp.array(dark)
     flat = cp.array(flat)
-    obj_gpu = cp.empty((1,n,n), dtype = cp.float32)
+    obj_gpu = cp.empty((1+2*pg_pad,n,n), dtype = cp.float32)
 
     stream = cp.cuda.Stream()
     
@@ -41,19 +48,20 @@ def recon_slice(projs, theta, center, dark, flat, sino_pos, pixel_size):
         dark = cp.array(dark[sino_slice,:].astype(np.float32), dtype = cp.float32)
         flat = cp.array(flat[sino_slice,:].astype(np.float32), dtype = cp.float32)
 
-        # dark-flat correction, phase retrieval
-        preprocess(data, dark, flat, pixel_size*1.0e-4)
+        print(f"data shape: (ntheta, nz, n) {data.shape}")
 
-        data = data[:,pg_pad:pg_pad+1,:]    
-        dark = dark[pg_pad:pg_pad+1,:]
-        flat = flat[pg_pad:pg_pad+1,:]
+        # dark-flat correction, phase retrieval
+        
+        preprocess(data, dark, flat, pixel_size*1.0e-4, apply_pg=True if pg_pad > 0 else False)
+        
 
         fbp_filter(data)
 
         rec_all(obj_gpu, data, theta, center)
 
     stream.synchronize()
-    return obj_gpu.get()[0]
+    
+    return obj_gpu.get()[pg_pad,...]
 
 
 def bin_projections(data, b):
@@ -80,7 +88,7 @@ def recon_binned(projs, theta, center, dark, flat, b, pixel_size):
     # center = center/float(b)
     # ntheta, nz, n = projs.shape
     
-
+    cp.fft.config.clear_plan_cache()
     stream = cp.cuda.Stream()
     
     with stream:

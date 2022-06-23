@@ -121,9 +121,23 @@ def edge_map(Y):
     msk[:,:,1:][tmp] = 1
     return msk > 0
 
+
+
+def cylindrical_mask_slice(out_img, mask_fac, mask_val = 0):
+
+    out_vol = out_img[np.newaxis,...].copy()
+
+    cylindrical_mask(out_vol, mask_fac, mask_val = mask_val)
+    out_img[:] = out_vol[0]
+    return
+    
+
+
+
 def cylindrical_mask(out_vol, mask_fac, mask_val = 0):
     
     xp = cp.get_array_module(out_vol)
+
     vol_shape = out_vol.shape
     assert vol_shape[1] == vol_shape[2], "must be a tomographic volume where shape y = shape x"
     

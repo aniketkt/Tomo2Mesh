@@ -3,7 +3,7 @@ import itertools
 import matplotlib.pyplot as plt
 
 import sys
-sys.path.append("/data01/Tomo2Mesh/scratchpad/polymer_am_eaton/AMPolyCalc/code")
+sys.path.append("/data01/Tomo2Mesh/scratchpad/polymer_am_eaton/code")
 from rw_utils import read_raw_data_1X
 from void_mapping import void_map_gpu
 from params import pixel_size_1X as pixel_size
@@ -14,7 +14,7 @@ if __name__ == "__main__":
     #Create and export ply files
     b = 4
     feret_thresh =3.0
-    edge_thresh = float(sys.argv[1])#0.75
+    edge_thresh = 0.75 #float(sys.argv[1])
     layer = 1
     sample_tag = 1
     projs, theta, center, dark, flat = read_raw_data_1X(sample_tag, layer)
@@ -29,9 +29,9 @@ if __name__ == "__main__":
     
     
     # surf.write_ply(f'/data01/Eaton_Polymer_AM/ply_files/ply_bin{b}_sample{sample_tag}_layer{layer}_edge{}.ply')
-    surf.write_ply(f'/data01/Eaton_Polymer_AM/ply_files/test_edge{edge_thresh}.ply')
+    # surf.write_ply(f'/data01/Eaton_Polymer_AM/ply_files/test_edge{edge_thresh}.ply')
 
-    exit()
+
     #Graph data
     feret_dm = voids_4["max_feret"]["dia"]
     eq_sph_dm = voids_4["max_feret"]["eq_sph"]
@@ -58,7 +58,7 @@ if __name__ == "__main__":
     ax.set_ylabel(labels[2])
     ax.set_title("Equivalent Sphere Diameter vs. Normalized Feret Diameter")
     plt.axvline(x = 15, color = "black")
-    plt.axhline(y = 3, color = "red")
+    plt.axhline(y = feret_thresh, color = "red")
     plt.show()
 
     feret_dm_adj = [] 

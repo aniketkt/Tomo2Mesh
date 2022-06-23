@@ -76,7 +76,7 @@ def read_raw_data_1X(sample_tag, layer_tag, csv_path = save_path):
         fname = "PE6_"+str(samp_num)+"_FOV"+str(FOV)+"_"+"0"*((len(str(scan_num))-3)*-1)+str(scan_num)+".h5"
         f = h5py.File(os.path.join(data_path, fname), 'r')
         projs = np.asarray(f['exchange/data'][:])
-        theta = np.radians(np.asarray(f['exchange/theta'][:]))
+        theta = np.radians(np.asarray(f['exchange/theta'][:]))%(2*np.pi)
         f.close()
         f = h5py.File(os.path.join(data_path, 'dark_fields_'+fname), 'r')
         dark = np.mean(f['exchange/data_dark'][:], axis = 0)

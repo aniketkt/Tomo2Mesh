@@ -22,7 +22,7 @@ def max_feret_dm(x_void, unit_vect = np.array([1,0,0]), normalize = True):
     vect = coord[1]-coord[0]
     #phi = np.arccos(np.dot(vect,unit_vect)/(np.sqrt(vect.dot(vect))*np.sqrt(unit_vect.dot(unit_vect)))) 
     phi = np.arccos(vect[0]/np.sqrt(vect[0]**2+vect[1]**2+vect[2]**2))*(180/np.pi)
-    theta = np.arctan(vect[1]/vect[2])*(180/np.pi)
+    theta = np.arctan(vect[1]/max(vect[2],1E-12))*(180/np.pi)
     return (feret_dm, theta, phi, eq_sphere, normalized_feret_dm)
 
 if __name__ == "__main__":

@@ -110,6 +110,7 @@ extern "C" {
                 //linear interpolation
                 s0 = roundf(sp);
                 ind = k * n * nz + tz * n + s0;
+                //ind = tz * n * ntheta + k * n + s0;
                 if ((s0 >= 0) & (s0 < n - 1))
                     f0 += g[ind] + (g[ind+1] - g[ind]) * (sp - s0) / n;
             }

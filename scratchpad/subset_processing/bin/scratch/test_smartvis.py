@@ -94,7 +94,7 @@ if __name__ == "__main__":
     voids_b.select_around_void(void_id, radius_around_void_um, pixel_size_um = pixel_res)
     print(f"\nSTEP: visualize voids in the neighborhood of void id {void_id} at full detail")    
 
-    cp.fft.config.clear_plan_cache()
+    
     p_sel, r_fac = voids_b.export_grid(wd)    
     x_voids, p_voids = process_patches(projs, theta, center, fe, p_sel, rec_min_max)
     
