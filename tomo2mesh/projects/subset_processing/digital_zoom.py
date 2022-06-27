@@ -3,12 +3,12 @@
 """ 
 """ 
 from operator import mod
-from tomo2mesh.misc.voxel_processing import TimerGPU, edge_map, modified_autocontrast, get_values_cyl_mask
-from tomo2mesh.fbp.recon import recon_patches_3d
+from tomo2mesh.misc.voxel_processing import TimerGPU, cylindrical_mask, edge_map, modified_autocontrast, get_values_cyl_mask
+# from tomo2mesh.fbp.recon import recon_patches_3d
 import cupy as cp
 import numpy as np
 from tomo2mesh import Grid
-from tomo2mesh.fbp.recon import recon_all_gpu, recon_all
+from tomo2mesh.projects.subset_processing.fbp import recon_all_gpu, recon_all, recon_patches_3d
 from tomo2mesh.structures.voids import Voids
 from skimage.filters import threshold_otsu
 from cupyx.scipy import ndimage
@@ -22,10 +22,10 @@ def coarse_map(projs, theta, center, b, b_K, dust_thresh):
 
     # fbp
     t_gpu.tic()
-    raw_data = projs[::b_K,::b,::b], theta[::b_K,...], center/b
-    _, nz, n = raw_data[0].shape    
-    V = cp.empty((nz,n,n), dtype = cp.float32)
-    recon_all_gpu(*raw_data, V)
+
+    raw_data = projs[::b,::b_K,::b], theta[::b_K,...], center/b
+    # V = cp.empty((nz,n,n), dtype = cp.float32)
+    V = recon_all_gpu(*raw_data)
     V[:] = ndimage.gaussian_filter(V,0.5)
     
     # binarize
@@ -33,6 +33,7 @@ def coarse_map(projs, theta, center, b, b_K, dust_thresh):
     rec_min_max = modified_autocontrast(voxel_values, s=0.01)
     thresh = cp.float32(threshold_otsu(voxel_values))    
     V[:] = (V<thresh).astype(cp.uint8)
+    cylindrical_mask(V,0.95,1)
     t_rec = t_gpu.toc('COARSE RECON')
 
     # connected components labeling
@@ -40,7 +41,7 @@ def coarse_map(projs, theta, center, b, b_K, dust_thresh):
     V = cp.array(V, dtype = cp.uint32)
     V[:], n_det = ndimage.label(V,structure = cp.ones((3,3,3),dtype=cp.uint8))    
     
-    voids_b = Voids(pad_bb = 5).count_voids(V.get(), b, dust_thresh)    
+    voids_b = Voids(pad_bb = 2).count_voids(V.get(), b, dust_thresh)    
     t_label = t_gpu.toc('LABELING')
     
     voids_b["rec_min_max"] = rec_min_max
@@ -82,9 +83,9 @@ def coarse_map_surface(V_bin, b, wd):
     print(f"\tSTAT: r value: {eff*100.0:.2f}")        
     return p3d_surf, p3d_zeros
 
-def process_subset(projs, theta, center, fe, p_surf, min_max, seg_batch = False):
+def process_subset(projs, theta, center, fe, p_surf, min_max):
 
-    if seg_batch:
+    if 1: # seg_batch argument deprecated
         # SCHEME 1: integrate reconstruction and segmention (segments data on gpu in batches as they are reconstructed)
         x_surf, p_surf = recon_patches_3d(projs, theta, center, p_surf, segmenter = fe, \
                                           segmenter_batch_size = 64, rec_min_max = min_max)

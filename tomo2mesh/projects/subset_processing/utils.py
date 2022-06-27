@@ -7,6 +7,7 @@ import h5py
 import numpy as np
 import sys
 import os
+from tomo2mesh.misc import viewer
 
 # coarse mapping parameters
 b = 4
@@ -32,7 +33,7 @@ voids_dir = '/data02/MyArchive/aisteer_3Dencoders/tmp_data/voids_data'
 data_output = '/data02/MyArchive/aisteer_3Dencoders/tmp_data/output_vis'
 time_logs = '/data02/MyArchive/aisteer_3Dencoders/tmp_data/time_logs'
 ply_dir = '/data02/MyArchive/aisteer_3Dencoders/tmp_data/ply'
-
+rec_dir = '/data02/MyArchive/aisteer_3Dencoders/tmp_data/full_rec'
 
 ply_subset = os.path.join(ply_dir, 'subset.ply')
 ply_coarse = os.path.join(ply_dir, 'coarse.ply')
@@ -43,6 +44,7 @@ if not os.path.exists(ply_dir):
     os.makedirs(ply_dir)
 if not os.path.exists(voids_dir):
     os.makedirs(voids_dir)
+
 
 def read_raw_data(fname, multiplier):
     hf = h5py.File(fname, 'r')
@@ -65,16 +67,31 @@ def read_raw_data(fname, multiplier):
     return projs, theta, center
     # [multiplier*10:,]
 
+
+def read_raw_data_b1(dtype = np.uint16):
+    hf = h5py.File(raw_fname, 'r')
+    sz = slice(-4096,None)
+    sw = slice(0,4096)
+    projs = np.asarray(hf["data"][:, sz, sw]).astype(dtype)
+    projs = np.ascontiguousarray(projs.swapaxes(0,1)) 
+    theta = np.asarray(hf["theta"][:])
+    center = float(np.asarray(hf["center"]))
+    hf.close()
+    return projs, theta, center
+
+
+
+
 def read_raw_data_b2():
     hf = h5py.File(raw_fname_b2, 'r')
-    projs = np.asarray(hf["data"][:])    
+    projs = np.asarray(hf["data"][:]).astype(np.float32)   
+    projs = np.ascontiguousarray(projs.swapaxes(0,1)) 
     print(projs.shape)
     theta = np.asarray(hf["theta"][:])
     center = float(np.asarray(hf["center"]))
     hf.close()
 
     return projs, theta, center
-
 
 
 

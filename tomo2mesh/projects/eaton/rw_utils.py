@@ -5,7 +5,7 @@ import pandas as pd
 import json
 import os
 
-from params import save_path, data_path, voids_path
+from tomo2mesh.projects.eaton.params import save_path, data_path, voids_path
 # rdf = pd.read_csv(save_path)
 
 def get_filename(sample_tag, layer_tag, csv_path = save_path):

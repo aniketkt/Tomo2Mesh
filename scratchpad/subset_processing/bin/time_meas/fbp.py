@@ -17,9 +17,9 @@ from tomo2mesh.misc.voxel_processing import TimerGPU
 
 
 N_ITERS = 5
-from utils import time_logs as output_path
-n = 2048
-ntheta = 1500
+from tomo2mesh.projects.subset_processing.utils import time_logs as output_path
+n = 4096
+ntheta = 3000
 nc = 32
 n_iter = 5
 tag = 'p3d_fbp'
@@ -61,14 +61,14 @@ if __name__ == "__main__":
     sparsity = np.logspace(0,2,10)
     r_fac_list = np.sort(1.0/sparsity)
 
-    data_cpu = np.random.normal(0,1,(ntheta, nc*n_iter, n)).astype(np.float32)
+    projs = np.random.normal(0,1,(nc*n_iter, ntheta, n)).astype(np.float32)
     theta = np.linspace(0, np.pi, ntheta, dtype = np.float32)
     center = n/2.0
 
     for r_fac in r_fac_list:
         print('\n'+'#'*30)
         print(f'experiment: n={n}, nz={nc}, ntheta={ntheta}, 1/r={(1.0/r_fac):.2f}\n')
-        dfs.append(run(data_cpu, theta, center, r_fac, n_iter, nc))
+        dfs.append(run(projs, theta, center, r_fac, n_iter, nc))
         
     pd.concat(dfs, ignore_index = True).to_csv(os.path.join(output_path, f'{tag}_times_n{n}_ntheta{ntheta}_nc{nc}.csv'), index=False)
     

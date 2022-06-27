@@ -256,7 +256,7 @@ def rec_all(obj, data, theta, center):
                     int(cp.ceil(nz/4))), (16, 16, 4), \
                    (obj, data, theta, cp.float32(center),\
                     ntheta, nz, n))
-        stream_rec.synchronize()
+    stream_rec.synchronize()
     
     end_gpu.record()
     end_gpu.synchronize()
@@ -264,6 +264,8 @@ def rec_all(obj, data, theta, center):
     
     # print("TIME rec_mask: %.2f ms"%t_gpu)
     return t_gpu
+
+
 
 
 def rec_patch(data, theta, center, stx, px, sty, py, stz, pz, TIMEIT = False):

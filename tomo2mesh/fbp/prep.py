@@ -57,19 +57,28 @@ def fbp_filter(data):
     return t_gpu
 
 def preprocess(data, dark, flat):
+
+    '''
+    Parameters
+    ----------
+    data : np.ndarray  
+        data has shape ntheta, nz, n  
+        
+    '''
     
-    data[:] = (data-dark)/(cp.maximum(flat-dark, 1.0e-6))                
+    data = (data-dark)/(cp.maximum(flat-dark, 1.0e-6))                
     
     fdata = ndimage.median_filter(data,[1,1,1])
     ids = cp.where(cp.abs(fdata-data)>0.5*cp.abs(fdata))
     data[ids] = fdata[ids]        
     
     if 0:
-        data[:] = paganin_filter(data, alpha = 0.001, energy = 30.0, pixel_size = 3.10e-04)
+        data = paganin_filter(data, alpha = 0.001, energy = 30.0, pixel_size = 3.10e-04)
 
-    data[:] = -cp.log(cp.maximum(data,1.0e-6))
+    data = -cp.log(cp.maximum(data,1.0e-6))
     
-    return
+    return data
+
 
 
 if __name__ == "__main__":

@@ -17,6 +17,9 @@ from skimage.measure import marching_cubes
 from tomo2mesh.misc.feret_diameter import max_feret_dm
 import pymesh
 from tomo2mesh.misc.num_density import num_density
+import functools
+from multiprocessing import Pool, cpu_count
+
 
 class Surface(dict):
     def __init__(self, vertices, faces, texture = None):
@@ -260,7 +263,7 @@ class Voids(dict):
         x_grid : np.asarray  
             list of cubic sub_volumes, all of same width  
         p_grid : Grid  
-            grid data structure  
+            instance of grid data structure  
 
         '''
 
@@ -446,10 +449,6 @@ class Voids(dict):
         self.select_by_indices(idxs)
         return
 
-
-
-
-
     def sort_by_size(self, reverse = False):
         
         '''
@@ -474,11 +473,11 @@ class Voids(dict):
         return
 
     def export_grid(self, wd):
-
+        
         wd = wd//self.b
         V_bin = np.zeros(self.vol_shape, dtype = np.uint8)
         for ii, s_void in enumerate(self["s_voids"]):
-            V_bin[s_void] = self["x_voids"][ii]
+            V_bin[s_void] = 1#self["x_voids"][ii]
         
         # find patches on surface
         p3d = Grid(V_bin.shape, width = wd)
@@ -488,8 +487,9 @@ class Voids(dict):
         p3d_sel = p3d.filter_by_condition(is_sel)
         if self.b > 1:
             p3d_sel = p3d_sel.rescale(self.b)
-        r_fac = len(p3d_sel)*(wd**3)/np.prod(p3d_sel.vol_shape)
+        r_fac = len(p3d_sel)*(p3d_sel.wd**3)/np.prod(p3d_sel.vol_shape)
         print(f"\tSTAT: 1/r value: {1/r_fac:.4g}")
+        
         return p3d_sel, r_fac
 
     def _void2mesh(self, void_id, tex_vals, edge_thresh):
@@ -506,34 +506,22 @@ class Voids(dict):
         # try skimage measure
         verts, faces, _, __ = marching_cubes(void, 0.5)
 
-
-        #####################################
-
-        # to-do: decimate
-
-        # # use vedo for marching cubes
-        # surf = vedo.Volume(void).isosurface(0.5)
-        # verts = surf.points()
-        # faces = surf.faces()
-        # verts = verts[:,::-1]
-
         verts -= 2 # correct for padding
         for i3 in range(3):
             verts[:,i3] += spt[i3] # z, y, x to x, y, z
         
-
         # if b > 1, scale up the size
         verts *= (self.b)
 
-        ###Work on decimating voids###
+        # Decimate
         if edge_thresh > 0:
             verts, faces, info = pymesh.collapse_short_edges_raw(verts, faces, edge_thresh, preserve_feature = True)
         
         # set texture
         texture = np.empty((len(verts),3), dtype = np.float32)
-        texture[:,0] = float(tex_vals[void_id,0])
-        texture[:,1] = float(tex_vals[void_id,1])
-        texture[:,2] = float(tex_vals[void_id,2])
+        texture[:,0] = float(tex_vals[0])
+        texture[:,1] = float(tex_vals[1])
+        texture[:,2] = float(tex_vals[2])
 
         return Surface(verts, faces, texture=texture)
 
@@ -567,10 +555,6 @@ class Voids(dict):
         '''
         st_chkpt = cp.cuda.Event(); end_chkpt = cp.cuda.Event(); st_chkpt.record()    
         
-        id_len = 0
-        verts = []
-        faces = []
-        texture = []
 
         
         if texture_key == "sizes":
@@ -598,12 +582,13 @@ class Voids(dict):
             tex_vals[:,1] = self["sizes"]
             tex_vals[:,2] = self["max_feret"]["norm_dia"] if "max_feret" in self.keys() else 0.0
 
-
-
-
-
+        # ORIGINAL
+        id_len = 0
+        verts = []
+        faces = []
+        texture = []
         for iv in range(len(self)):
-            surf = self._void2mesh(iv, tex_vals, edge_thresh = edge_thresh)
+            surf = self._void2mesh(iv, tex_vals[iv], edge_thresh = edge_thresh)
             if not np.any(surf["faces"]):
                 continue
             verts.append(surf["vertices"])
@@ -632,6 +617,44 @@ class Voids(dict):
         print(f"\tTIME: compute void mesh {t_chkpt/1000.0:.2f} secs")
         return surf
 
+    def export_void_mesh_mproc(self, texture_key, edge_thresh = 1.0):
+
+        '''export with texture, slower but vis with color coding
+        '''
+        st_chkpt = cp.cuda.Event(); end_chkpt = cp.cuda.Event(); st_chkpt.record()    
+        
+        if texture_key == "sizes":
+            tex_vals = np.empty((len(self),3))
+            tex_vals[:,0] = np.log(self["sizes"]+1.0e-12) #255 #void_id
+            tex_vals[:,1] = 255
+            tex_vals[:,2] = 255
+            
+        elif "distance" in texture_key:
+            raise ValueError("not implemented")
+
+        elif "max_feret" in texture_key:
+            if "max_feret" not in self.keys():
+                self.calc_max_feret_dm()            
+            tex_vals = np.empty((len(self),3))
+            tex_vals[:,0] = self[texture_key]["norm_dia"].copy()
+            tex_vals[:,1] = self[texture_key]["theta"].copy()            
+            tex_vals[:,2] = self[texture_key]["phi"].copy()
+
+        elif "number_density" in texture_key:
+            if "number_density" not in self.keys():
+                raise ValueError("number density is not computed")
+            tex_vals = np.empty((len(self),3))
+            tex_vals[:,0] = self[texture_key]
+            tex_vals[:,1] = self["sizes"]
+            tex_vals[:,2] = self["max_feret"]["norm_dia"] if "max_feret" in self.keys() else 0.0
+
+        # ALTERNATIVE
+        # remove empty voids (originating from those misclassified in coarse step)
+        surf = void2mesh_mproc(self["x_voids"], self["cpts"], tex_vals, edge_thresh, self.b)
+        end_chkpt.record(); end_chkpt.synchronize(); t_chkpt = cp.cuda.get_elapsed_time(st_chkpt,end_chkpt)
+        print(f"\tTIME: compute void mesh {t_chkpt/1000.0:.2f} secs")
+        return surf
+
 
     def calc_max_feret_dm(self):
 
@@ -655,7 +678,85 @@ class Voids(dict):
         timer.toc("calculate number density")
         return
 
+def single_void2mesh(void, spt, tex_val, edge_thresh = 0.0, b = 1):
+
+    # make watertight
+    void = np.pad(void, tuple([(2,2)]*3), mode = "constant", constant_values = 0)
         
+    # try skimage measure
+    verts, faces, _, __ = marching_cubes(void, 0.5)
+
+    verts -= 2 # correct for padding
+    for i3 in range(3):
+        verts[:,i3] += spt[i3] # z, y, x to x, y, z
+    
+    # if b > 1, scale up the size
+    verts *= b
+
+    # Decimate
+    if edge_thresh > 0:
+        verts, faces, info = pymesh.collapse_short_edges_raw(verts, faces, edge_thresh, preserve_feature = True)
+    
+    # set texture
+    texture = np.empty((len(verts),3), dtype = np.float32)
+    texture[:,0] = float(tex_val[0])
+    texture[:,1] = float(tex_val[1])
+    texture[:,2] = float(tex_val[2])
+
+    return verts, faces, texture
+
+def void2mesh_mproc(x_voids, cpts, tex_vals, edge_thresh, b):
+
+    # remove void sub-volumes which are empty (these originate from the coarse map where the subset reconstruction reveals there was no void in this bounding box)
+    idxs = np.arange(len(x_voids))
+    cond_list = np.asarray([1 if np.std(x_voids[idx]) > 0 else 0 for idx in idxs])
+    idxs = idxs[cond_list == 1]
+    x_voids = [x_voids[ii] for ii in idxs]
+    cpts = cpts[idxs]
+    tex_vals = tex_vals[idxs]
+    
+    # multiprocess marching cubes and mesh reduction
+    func = functools.partial(single_void2mesh, edge_thresh = edge_thresh, b = b)
+    pool = Pool(processes = cpu_count())
+    outlist = pool.starmap(func, list(zip(x_voids, cpts, tex_vals)))
+    pool.close()
+    pool.join()
+    
+    # merge individual void mesh objects
+    verts = []
+    faces = []
+    texture = []
+    id_len = 0
+    for item in outlist:
+        vx, fc, tex = item
+        verts.append(vx)
+        faces.append(np.array(fc) + id_len)
+        texture.append(tex)
+        id_len = id_len + len(vx)
+
+    # normalize colormap
+    texture = np.concatenate(texture, axis = 0)
+    for i3 in range(3):
+        color = texture[:,i3]
+        min_val = color.min()
+        max_val = color.max()
+        if max_val > min_val:
+            texture[:,i3] = 255*(color - min_val)/(max_val - min_val)
+        else:
+            texture[:,i3] = 255
+
+
+    surf = Surface(np.concatenate(verts, axis = 0), \
+                    np.concatenate(faces, axis = 0), \
+                    texture = texture.astype(np.uint8))
+    
+    return surf
+
+
+
+
+
+
 
 
 

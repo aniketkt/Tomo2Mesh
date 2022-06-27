@@ -6,43 +6,58 @@
 import numpy as np
 import cupy as cp
 
+class TimerGPU():
 
-from tomo2mesh.projects.subset_processing.utils import *
-from tomo2mesh.misc.voxel_processing import TimerGPU
+    def __init__(self):
+        pass
 
+    def tic(self):
+        self.start = cp.cuda.Event()
+        self.end = cp.cuda.Event()
+        self.start.record()
+        return
+    
+    def toc(self, msg = "execution"):
+        self.end.record()
+        self.end.synchronize()
+        t_elapsed = cp.cuda.get_elapsed_time(self.start, self.end)
+
+        if msg != "execution":
+            print(f"\tTIME: {msg} {t_elapsed:.2f} ms")
+        return t_elapsed
+
+n = 2048
+ntheta = 1500
+nc = 32
+nz = 128
+
+def pinned_array(array):
+    # first constructing pinned memory
+    mem = cp.cuda.alloc_pinned_memory(array.nbytes)
+    src = np.frombuffer(
+                mem, array.dtype, array.size).reshape(array.shape)
+    src[...] = array
+    return src
 
 if __name__ == "__main__":
 
-    timer_transfer = TimerGPU("ms")
-    # projs, theta, center = read_raw_data_b1()
-    # projs = projs[:1024,:,:].astype(np.float32)
+    # next step: try this
+    # https://docs.cupy.dev/en/stable/reference/generated/cupy.cuda.MemoryPointer.html
+    # https://docs.cupy.dev/en/stable/reference/generated/cupy.cuda.MemoryPointer.html#cupy.cuda.MemoryPointer.copy_from_host_async
 
-    projs, theta, center = read_raw_data_b2()
-
-    ntheta, nz, n = projs.shape
-
-    a = cp.empty((ntheta, 32, n), dtype = cp.float32)
-    stream1 = cp.cuda.Stream(non_blocking=True)
-    for ii in range(10):
-        timer_transfer.tic()
-        with stream1:
-            a.set(projs[:,5:32+5,...])
-        stream1.synchronize()
-        timer_transfer.toc("transfer time along axis 1")
-
-    timer_transfer.tic()
-    projs = np.ascontiguousarray(projs.swapaxes(0,1))
-    timer_transfer.toc("swapping contiguous array")
+    # case 1: approx 117 ms
+    b = np.float32(np.random.normal(0, 1, (ntheta, nz, n)))
+    print(b.shape)
+    a = cp.empty((ntheta, nc, n), dtype = cp.float32)
     
-    
-    a = cp.empty((32, ntheta, n), dtype = cp.float32)
-    stream1 = cp.cuda.Stream(non_blocking=True)
-    for ii in range(10):
-        timer_transfer.tic()
-        with stream1:
-            a.set(projs[5:32+5,...])
-        stream1.synchronize()
-        timer_transfer.toc("transfer time along axis 0")
+    # timer_transfer = TimerGPU()
+    # stream1 = cp.cuda.Stream(non_blocking=True)
+    # for ii in range(10):
+    #     timer_transfer.tic()
+    #     with stream1:
+    #         a.set(b[:,5:32+5])
+    #     stream1.synchronize()
+    #     timer_transfer.toc("transfer time")
 
 
     # case 2: approx 39 ms

@@ -4,7 +4,7 @@ from tomo2mesh.fbp.prep import fbp_filter
 from cupyx.scipy import ndimage
 import cupy as cp
 import numpy as np
-from params import *
+from tomo2mesh.projects.eaton.params import *
 import numexpr as ne
 
 
