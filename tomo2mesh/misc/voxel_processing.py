@@ -154,7 +154,7 @@ def cylindrical_mask(out_vol, mask_fac, mask_val = 0):
     return
 
 def get_values_cyl_mask(vol, mask_fac):
-
+    #import pdb; pdb.set_trace()
     xp = cp.get_array_module(vol)
     vol_shape = vol.shape
     assert vol_shape[1] == vol_shape[2], "must be a tomographic volume where shape y = shape x"
@@ -218,7 +218,7 @@ def modified_autocontrast(vol, s = 0.01, normalize_sampling_factor = 2):
     return alow, ahigh
 
 
-def normalize_volume_gpu(vol, chunk_size = 64, normalize_sampling_factor = 1, TIMEIT = False):
+def normalize_volume_gpu(vol, chunk_size = 1, normalize_sampling_factor = 1, TIMEIT = False, use_autocontrast = False):
     '''
     Normalizes volume to values into range [0,1]  
 
@@ -226,7 +226,11 @@ def normalize_volume_gpu(vol, chunk_size = 64, normalize_sampling_factor = 1, TI
 
     tot_len = vol.shape[0]
     nchunks = int(np.ceil(tot_len/chunk_size))
-    min_val, max_val = _find_min_max(vol, normalize_sampling_factor)
+    if use_autocontrast:
+        min_max = modified_autocontrast(vol[::normalize_sampling_factor, ::normalize_sampling_factor, ::normalize_sampling_factor], s = 0.01)
+        min_val, max_val = min_max
+    else:
+        min_val, max_val = _find_min_max(vol, normalize_sampling_factor)
     
     proc_times = []
     copy_to_times = []

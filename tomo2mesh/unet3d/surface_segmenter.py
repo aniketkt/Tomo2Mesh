@@ -153,54 +153,8 @@ class SurfaceSegmenter(Vox2VoxProcessor_fCNN):
         model_key = "segmenter"
         self.model_tag = "_".join(model_names[model_key].split("_")[1:])
         return
-    
 
-
-    def data_generator(self, Xs, Ys, batch_size, input_size, cutoff, random_rotate, add_noise):
-
-        '''
-        
-        Parameters  
-        ----------  
-        vol : np.array  
-            Volume from which patches are extracted.  
-        batch_size : int  
-            Size of the batch generated at every iteration.  
-        sampling_method : str  
-            Possible methods include "random", "random-fixed-width", "grid"  
-        
-        '''
-        
-        while True:
-            n_vols = len(Xs)
-            idx_vols = np.repeat(np.arange(0, n_vols), int(np.ceil(batch_size/n_vols)))
-            idx_vols = idx_vols[:batch_size]
-            
-            xy = []
-            for ivol in range(n_vols):
-                
-                Y_gt = Ys[ivol] if len(Ys) > 1 else Ys[0]
-                sub_batch_size = np.sum(idx_vols == ivol)
-#                 print(f"ivol: {ivol}, sub_batch_size: {sub_batch_size}") 
-                if sub_batch_size < 1:
-                    continue
-                
-                patches = self.get_training_patches(Xs[ivol].shape, \
-                                                    sub_batch_size, \
-                                                    input_size, \
-                                                    max_stride, \
-                                                    cutoff, \
-                                                    Y_gt)
-                
-                xy.append(self.extract_training_patch_pairs(Xs[ivol], Y_gt, \
-                                                            patches, add_noise, \
-                                                            random_rotate, input_size))
-                
-            yield np.concatenate([_xy[0] for _xy in xy], axis = 0, dtype = 'float32'), np.concatenate([_xy[1] for _xy in xy], axis = 0, dtype = 'uint8')
-
-
-
-    def _data_generator(self, Xs, Ys, batch_size, input_size, max_stride, cutoff, random_rotate, add_noise):
+    def data_generator(self, Xs, Ys, batch_size, input_size, max_stride, cutoff, random_rotate, add_noise):
         
         '''
         
@@ -264,7 +218,9 @@ class SurfaceSegmenter(Vox2VoxProcessor_fCNN):
             # to-do: check dims
             assert out_arr.shape == x.shape, "x and out_arr shapes must be equal and 4-dimensional (batch_size, nz, ny, nx, 1)"
 
-        for k in range(nchunks):
+        import tqdm
+        
+        for k in tqdm.trange(nchunks):
 
             sb = slice(k*chunk_size , min((k+1)*chunk_size, nb))
             x_in = x[sb,...]

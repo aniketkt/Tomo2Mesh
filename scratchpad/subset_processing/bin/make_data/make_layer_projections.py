@@ -12,13 +12,11 @@ import time
 import seaborn as sns
 import pandas as pd
 
-from tomo_encoders import Patches
-from tomo_encoders.misc import viewer
-from tomo_encoders import DataFile
+
+from tomo2mesh import DataFile
 import cupy as cp
-from tomo_encoders.reconstruction.project import get_projections
-from tomo_encoders.reconstruction.recon import recon_binning
-from tomo_encoders.misc.voxel_processing import cylindrical_mask, normalize_volume_gpu
+from tomo2mesh.fbp.project import get_projections
+from tomo2mesh.misc.voxel_processing import cylindrical_mask, normalize_volume_gpu
 
 read_path = '/data02/MyArchive/aisteer_3Dencoders/tmp_data/mosaic'
 save_path = '/data02/MyArchive/aisteer_3Dencoders/tmp_data/mosaic_raw'

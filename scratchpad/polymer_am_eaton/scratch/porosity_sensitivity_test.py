@@ -1,5 +1,5 @@
 from cmath import nan
-from Tomo2Mesh.scratchpad.polymer_am_eaton.scratch.plot_eaton_graphs import number_density_z
+from scratchpad.polymer_am_eaton.scratch.plot_eaton_graphs import number_density_z
 from tomo2mesh.structures.voids import VoidLayers
 import numpy as np
 import matplotlib.pyplot as plt
@@ -30,35 +30,34 @@ import matplotlib as mpl
 mpl.use('Agg')
 
 
-sample_tag = '1'
-layer = 1
+sample_tag = str(sys.argv[1])
+layer = str(sys.argv[2])
 raw_pixel_size = pixel_size
 number_density_radius = 50
 b=1
-vol = 288*612*612*(np.pi/4)
+vol = 1152*2448*2448*(np.pi/4)
 
 projs, theta, center, dark, flat = read_raw_data_1X(sample_tag, layer)
-#voids = void_map_gpu(projs, theta, center, dark, flat, b, raw_pixel_size)
 voids = void_map_all(projs, theta, center, dark, flat, b, raw_pixel_size)
-voids.calc_max_feret_dm()
-voids.calc_number_density(number_density_radius)
 
-thresh = [1,2,3,4,5,6]
+dust_thresh = [2,4,5,8,11,14,17,20,23,26,29,32,35,38,41,44,47] #11 is b=4
 porosity = []
-for i in range(len(thresh)):
+for i in range(len(dust_thresh)):
     count = 0
-    for j in (len(voids['sizes'])):
-        if np.mult(voids['sizes'][j].shape) > thresh[i]**3:
-            count+=np.sum(voids['sizes'][j])
-    porosity.append(count/vol)
+    for j in range(len(voids['x_voids'])):
+        if np.all(np.clip(voids['x_voids'][j].shape-np.array((dust_thresh[i],dust_thresh[i],dust_thresh[i])), 0, None)):
+            count+=voids['sizes'][j]
+    #porosity.append(count/vol)
+    porosity.append(count/np.sum(voids['x_boundary']==0))
+
 
 sns.set(font_scale=1.3)
 sns.set_style(style = "white")
 fig, ax = plt.subplots(1,1, figsize = (16,8))
-ax.scatter(thresh, porosity)
-ax.set_title("Porosity vs. Binning Factor")
+ax.scatter(dust_thresh, porosity)
+ax.set_title("Porosity vs. Dust Threshold")
 ax.set_ylabel("Porosity")
-ax.set_xlabel("Binning Factor")
+ax.set_xlabel("Dust Threshold")
 #ax.set(xlim=(20, 1130))
-plt.savefig(plots_dir + f'sensitivity_test_porosity.png', format='png')
+plt.savefig(plots_dir + f'sensitivity_test_porosity_sample{sample_tag}_layer{str(layer)}.png', format='png')
 plt.close()

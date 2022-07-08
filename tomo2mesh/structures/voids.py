@@ -328,8 +328,6 @@ class Voids(dict):
 
 
     def count_voids(self, V_lab, b, dust_thresh, boundary_loc = (0,0,0)):
-
-        
         self.dust_thresh = dust_thresh
         self.vol_shape = V_lab.shape
         boundary_id = V_lab[boundary_loc]

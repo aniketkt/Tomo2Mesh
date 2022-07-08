@@ -23,6 +23,7 @@ from multiprocessing import Pool, Process
 
 def recon_all(projs, theta, center, nc, dark_flat = None):
 
+    raise NotImplementedError("something is wrong with this function")
     ntheta, nz, n = projs.shape
     data = cp.empty((ntheta, nc, n), dtype = cp.float32)
     theta = cp.array(theta, dtype = cp.float32)

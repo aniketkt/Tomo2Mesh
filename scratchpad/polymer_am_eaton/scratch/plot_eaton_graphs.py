@@ -1,6 +1,7 @@
 from cmath import nan
 from tomo2mesh.structures.voids import VoidLayers
 import numpy as np
+import cupy as cp
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
@@ -116,8 +117,9 @@ def merge_void_layers(sample_tag, start_layer, end_layer, b, raw_pixel_size, num
 
     for ii, layer in enumerate(range(start_layer, end_layer+1)): 
         projs, theta, center, dark, flat = read_raw_data_1X(sample_tag, layer)
-        #voids = void_map_gpu(projs, theta, center, dark, flat, b, raw_pixel_size)
-        voids = void_map_all(projs, theta, center, dark, flat, b, raw_pixel_size)
+        voids = void_map_gpu(projs, theta, center, dark, flat, b, raw_pixel_size)
+        #cp._default_memory_pool.free_all_blocks(); cp.fft.config.get_plan_cache().clear()  
+        #voids = void_map_all(projs, theta, center, dark, flat, b, raw_pixel_size)
         print(f"BOUNDARY SHAPE: {voids['x_boundary'].shape}")
         # voids.select_by_size(100.0, pixel_size_um = pixel_size) # remove later
 
@@ -145,7 +147,7 @@ def merge_void_layers(sample_tag, start_layer, end_layer, b, raw_pixel_size, num
 
 if __name__ == "__main__":
 
-    b = 4 
+    b = 4
     # print(V[::4,::4,::4].shape)
     # end_layer = 4
     # sample_tag = '1'
@@ -165,6 +167,7 @@ if __name__ == "__main__":
     #voids_all.export_void_mesh_with_texture("number_density").write_ply(f'/data01/Eaton_Polymer_AM/ply_files/sample_{sample_name}_layers_{start_layer}_{end_layer}.ply')
     voids_all.write_to_disk(f'/data01/Eaton_Polymer_AM/voids_data/sample{sample_name}_all_layers')
 
+    exit()
 
     #################################################
 
@@ -400,8 +403,11 @@ if __name__ == "__main__":
     labels = ["$d_{fe}$", "$d_{sp}$", "$d^{*}_{fe}$", "$\Theta$", "$\phi$"]
     fig, ax = plt.subplots(3,1, figsize = (8,8), sharex = False)
     ax[0].hist(feret_dm, bins = 100, density = True)
+    ax[0].axvline(np.mean(feret_dm), color = "black")
     ax[1].hist(eq_sph_dm, bins = 100, density = True)
+    ax[1].axvline(np.mean(eq_sph_dm), color = "black")
     ax[2].hist(norm_dm, bins = 100, density = True)
+    ax[2].axvline(np.mean(norm_dm), color = "black")
     ax[0].set_title("Histograms on the Size of Voids")
     ax[1].set_ylabel("Probability Density")
     ax[0].set_xlabel(labels[0])
@@ -420,9 +426,13 @@ if __name__ == "__main__":
             
     fig, ax = plt.subplots(2,1, figsize = (8,8))
     ax[0].hist(theta, bins=100, color = 'blue', density = True)
+    ax[0].axvline(np.mean(theta), color = "green")
     ax[0].hist(theta_adj, bins=100, color = 'red', density = True)
+    ax[0].axvline(np.mean(theta_adj), color = "orange")
     ax[1].hist(phi, bins=100, color = 'blue', density = True)
+    ax[1].axvline(np.mean(phi), color = "green")
     ax[1].hist(phi_adj, bins=100, color = 'red', density = True)
+    ax[1].axvline(np.mean(feret_dm), color = "orange")
     ax[0].set_title("Histograms on the Orientation of Voids")
     ax[0].set_xlabel(labels[3])
     ax[1].set_xlabel(labels[4])
@@ -433,5 +443,12 @@ if __name__ == "__main__":
 
     #Porosity value
     print("Porosity:", porosity)
+    print("Theta (Std):", np.std(theta))
+    print(f"Theta (Std), CUTOFF {CUTOFF_CRACKS}:", np.std(theta_adj))
+    print("Phi (Std):", np.std(phi))
+    print(f"Phi (Std), CUTOFF {CUTOFF_CRACKS}:", np.std(phi_adj))
+    print("Feret Diameter (Std):", np.std(feret_dm))
+    print("Eq. Sphere Diameter (Std):", np.std(eq_sph_dm))
+    print("Normalized Feret Diameter (Std):", np.std(norm_dm))
     print("Sample", sample_name)
     
