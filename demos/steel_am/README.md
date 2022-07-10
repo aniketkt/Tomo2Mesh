@@ -22,5 +22,5 @@ It should output .ply files that can be viewed in a visualization software of yo
 
 
 <p align="center">  
-  <img width="800" src="images/steel_am.png">  
+  <img width="800" src="../../images/steel_am.png">  
 </p>  
