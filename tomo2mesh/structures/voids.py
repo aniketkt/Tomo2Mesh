@@ -14,9 +14,9 @@ import os
 from tifffile import imsave, imread
 import h5py
 from skimage.measure import marching_cubes
-from tomo2mesh.misc.feret_diameter import max_feret_dm
+from tomo2mesh.porosity.feret_diameter import max_feret_dm
 import pymesh
-from tomo2mesh.misc.num_density import num_density
+from tomo2mesh.porosity.num_density import num_density
 import functools
 from multiprocessing import Pool, cpu_count
 

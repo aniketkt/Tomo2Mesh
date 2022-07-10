@@ -12,51 +12,79 @@ import tensorflow as tf
 # from cupyx.scipy.fft import rfft, irfft, rfftfreq
 import tqdm
 from cupyx.scipy.fft import rfft, irfft, rfftfreq, get_fft_plan
-from cupyx.scipy.ndimage import gaussian_filter, median_filter
 from tomo2mesh import Grid
-from cupyx.scipy import ndimage
-from tomo2mesh.fbp.retrieve_phase import paganin_filter
-from tomo2mesh.fbp.cuda_kernels import rec_patch, rec_mask, rec_all
+# from cupyx.scipy import ndimage
+from tomo2mesh.fbp.cuda_kernels import rec_mask, rec_all
 from tomo2mesh.fbp.prep import fbp_filter, preprocess, calc_padding    
 from tomo2mesh.misc.voxel_processing import TimerGPU
 from multiprocessing import Pool, Process
 
-def recon_all(projs, theta, center, nc, dark_flat = None):
+def recon_all(projs, theta, center, nc, dark_flat = None, sinogram_order = True):
+    
+    # assert projs.dtype == np.float32, "projs dtype must be float32"
+    if not sinogram_order:
+        projs = projs.swapaxes(0,1)
 
-    raise NotImplementedError("something is wrong with this function")
-    ntheta, nz, n = projs.shape
-    data = cp.empty((ntheta, nc, n), dtype = cp.float32)
-    theta = cp.array(theta, dtype = cp.float32)
-    center = cp.float32(center)
-    if dark_flat is not None:
-        dark, flat = dark_flat
-        dark = cp.array(dark)
-        flat = cp.array(flat)
-
-    obj_gpu = cp.empty((nc, n, n), dtype = cp.float32)
-    obj_out = np.empty((nz, n, n), dtype = np.float32)
-
+    # beyond this point, projs array will have shape nz, ntheta, n
+    timer = TimerGPU("ms")
+    memory_pool = cp.cuda.MemoryPool()
+    cp.cuda.set_allocator(memory_pool.malloc)
+    device = cp.cuda.Device()
+    
+    nz, ntheta, n = projs.shape
+    
+    with cp.cuda.Stream() as stream:
+        data = cp.empty((nc, ntheta, n), dtype = cp.float32)
+        theta = cp.array(theta, dtype = cp.float32)
+        center = cp.float32(center)
+        obj_gpu = cp.empty((nc, n, n), dtype = cp.float32)
+        obj_out = np.empty((nz, n, n), dtype = np.float32)
+    
+        # fft stuff        
+        pad_left, pad_right = calc_padding((ntheta, nc, n))
+        data_padded = cp.empty((nc, ntheta, n+pad_left+pad_right), dtype = cp.float32)
+        data0 = cp.empty((nc, ntheta, (n+pad_left+pad_right)//2+1), dtype = cp.complex64)
+        plan_fwd = get_fft_plan(data_padded, axes=2, value_type='R2C')
+        plan_inv = get_fft_plan(rfft(data_padded,axis=2), axes=2, value_type='C2R')
+        t = rfftfreq(data_padded.shape[2])
+        wfilter = t.astype(cp.float32) #* (1 - t * 2)**3  # parzen
+    
+    stream.synchronize()
     
     for ic in tqdm.trange(int(np.ceil(nz/nc))):
         s_chunk = slice(ic*nc, (ic+1)*nc)
         # COPY DATA TO GPU
-        start_gpu = cp.cuda.Event(); end_gpu = cp.cuda.Event(); start_gpu.record()
+        timer.tic()
         stream = cp.cuda.Stream()
         with stream:
-            data.set(projs[:,s_chunk,:].astype(np.float32))
-        end_gpu.record(); end_gpu.synchronize(); t_cpu2gpu = cp.cuda.get_elapsed_time(start_gpu,end_gpu)
-        # print(f"\tTIME copying data to gpu: {t_cpu2gpu:.2f} ms")            
+            data.set(projs[s_chunk,...].astype(np.float32))
+        stream.synchronize()
+        t_cpu2gpu = timer.toc()
             
         # PREPROCESS
-        if dark_flat is not None:
-            t_prep = preprocess(data, dark[s_chunk], flat[s_chunk])
+        stream = cp.cuda.Stream()
+        with stream:        
+            if dark_flat is not None:
+                dark = cp.array(np.float32(dark_flat[0][s_chunk]), dtype = cp.float32)
+                flat = cp.array(np.float32(dark_flat[1][s_chunk]), dtype = cp.float32)
+                data[:] = preprocess(data.swapaxes(0,1), dark, flat).swapaxes(0,1)
+        stream.synchronize()
 
         # FBP FILTER
-        t_filt = fbp_filter(data)
-        # print(f'\tTIME fbp filter: {t_filt:.2f} ms')
+        timer.tic()
+        with plan_fwd:
+            # filter mask and fft
+            #(1 - t * 2)**3  # parzen
+            data_padded[:] = cp.pad(data, ((0,0),(0,0),(pad_left, pad_right)), mode = 'edge')
+            data0[:] = wfilter*rfft(data_padded, axis=2)
+            
+        with plan_inv:
+            # inverse fft
+            data[:] = irfft(data0, axis=2)[...,pad_left:-pad_right]
+        t_filt = timer.toc()
         
         # BACK-PROJECTION
-        t_rec = rec_all(obj_gpu, data, theta, center)
+        t_rec = rec_all(obj_gpu, data.swapaxes(0,1), theta, center)
         # print(f'\tTIME back-projection: {t_rec:.2f} ms')
         
         obj_out[s_chunk] = obj_gpu.get()
@@ -66,11 +94,15 @@ def recon_all(projs, theta, center, nc, dark_flat = None):
     
     return obj_out
 
-def recon_all_gpu(projs, theta, center, obj, dark_flat = None):
+def recon_all_gpu(projs, theta, center, dark_flat = None, sinogram_order = True):
     '''reconstruct with full projection array on gpu and apply some convolutional filters in post-processing
     projection array must fit in GPU memory'''    
     
-    # timer = TimerGPU()
+    if not sinogram_order:
+        projs = projs.swapaxes(0,1)
+    
+    nz, ntheta, n = projs.shape
+    timer = TimerGPU("ms")
     # timer.tic()
     device = cp.cuda.Device()
     memory_pool = cp.cuda.MemoryPool()
@@ -79,55 +111,41 @@ def recon_all_gpu(projs, theta, center, obj, dark_flat = None):
     
     stream_copy = cp.cuda.Stream()
     with stream_copy:
-        data = cp.array(projs.astype(np.float32), dtype = cp.float32)
+        data = cp.array(np.float32(projs), dtype = cp.float32)
         if dark_flat is not None:
             dark, flat = dark_flat
             dark = cp.array(dark)
             flat = cp.array(flat)
-            t_prep = preprocess(data, dark, flat)
+            data[:] = preprocess(data.swapaxes(0,1), dark, flat).swapaxes(0,1)
         
         # theta and center
         theta = cp.array(theta, dtype = 'float32')
         center = cp.float32(center)
-    
-        fbp_filter(data) # need to apply filter to full projection  
-        rec_all(obj, data, theta, center)
+
+        # fbp filter
+        pad_left, pad_right = calc_padding((ntheta, nz, n))
+        data_padded = cp.empty((nz, ntheta, n+pad_left+pad_right), dtype = cp.float32)
+        data0 = cp.empty((nz, ntheta, (n+pad_left+pad_right)//2+1), dtype = cp.complex64)
+        plan_fwd = get_fft_plan(data_padded, axes=2, value_type='R2C')
+        plan_inv = get_fft_plan(rfft(data_padded,axis=2), axes=2, value_type='C2R')
+        t = rfftfreq(data_padded.shape[2])
+        wfilter = t.astype(cp.float32) #* (1 - t * 2)**3  # parzen
+
+        timer.tic()
+        with plan_fwd:
+            # filter mask and fft
+            #(1 - t * 2)**3  # parzen
+            data_padded[:] = cp.pad(data, ((0,0),(0,0),(pad_left, pad_right)), mode = 'edge')
+            data0[:] = wfilter*rfft(data_padded, axis=2)
+            
+        with plan_inv:
+            # inverse fft
+            data[:] = irfft(data0, axis=2)[...,pad_left:-pad_right]
+        t_filt = timer.toc()
+        
+        obj = cp.empty((nz,n,n), dtype = cp.float32)
+        rec_all(obj, data.swapaxes(0,1), theta, center)
         stream_copy.synchronize()
-    del data
-    memory_pool.free_all_blocks()    
-    device.synchronize()
-    # _ = timer.toc(f"reconstruction shape {obj.shape}, median filter {median_kernel}, gaussian filter {blur_sigma}")
-    
-    return
-
-
-def recon_all_gpu0(projs, theta, center, obj):
-    '''reconstruct with full projection array on gpu and apply some convolutional filters in post-processing
-    projection array must fit in GPU memory'''    
-    
-    # timer = TimerGPU()
-    # timer.tic()
-    device = cp.cuda.Device()
-    memory_pool = cp.cuda.MemoryPool()
-    cp.cuda.set_allocator(memory_pool.malloc)
-    # memory_pool.set_limit(size=44*1024**3)
-    stream = cp.cuda.Stream()
-    
-    ntheta, nz, n = projs.shape
-    data = cp.empty((ntheta,1,n), dtype = cp.float32)
-    theta = cp.array(theta, dtype = cp.float32)
-    center = cp.float32(center)
-    obj_slice = cp.empty((1,n,n), dtype = cp.float32)
-
-    from tqdm import trange
-    for ii in trange(nz):
-        with stream:
-            data[:,0,:] = cp.array(projs[:,ii,:].astype(np.float32))
-            t_filt = fbp_filter(data) # need to apply filter to full projection  
-            rec_all(obj_slice, data, theta, center)
-            obj[ii] = obj_slice[0]
-            stream.synchronize()
-
     del data
     memory_pool.free_all_blocks()    
     device.synchronize()
@@ -135,8 +153,9 @@ def recon_all_gpu0(projs, theta, center, obj):
     
     return obj
 
-
-def recon_patches_3d(projs, theta, center, p3d, TIMEIT = False, segmenter = None, segmenter_batch_size = 256, dark_flat = None, rec_min_max = None, sinogram_order = True):
+def recon_patches_3d(projs, theta, center, p3d, TIMEIT = False, \
+                     segmenter = None, segmenter_batch_size = 256, \
+                     dark_flat = None, rec_min_max = None, sinogram_order = True):
 
     '''
     Parameters
@@ -145,8 +164,7 @@ def recon_patches_3d(projs, theta, center, p3d, TIMEIT = False, segmenter = None
         array has shape ntheta, nz, n if sinogram_order is False, else has shape nz, ntheta, n  
 
     '''
-    raise NotImplementedError("not implemented here")
-    assert projs.dtype == np.float32, "projs dtype must be float32"
+    # assert projs.dtype == np.float32, "projs dtype must be float32"
     if not sinogram_order:
         projs = projs.swapaxes(0,1)
 
@@ -174,6 +192,7 @@ def recon_patches_3d(projs, theta, center, p3d, TIMEIT = False, segmenter = None
         t = rfftfreq(data_padded.shape[2])
         wfilter = t.astype(cp.float32) #* (1 - t * 2)**3  # parzen
     
+    stream.synchronize()
 
     x = []
     times = []
@@ -190,15 +209,16 @@ def recon_patches_3d(projs, theta, center, p3d, TIMEIT = False, segmenter = None
         stream = cp.cuda.Stream()
         timer.tic()
         with stream:
-            data.set(projs[z_pt:z_pt+nc,...])
+            data.set(np.float32(projs[z_pt:z_pt+nc,...]))
+            # data.set(projs[z_pt:z_pt+nc,...])
         stream.synchronize()
         t_cpu2gpu = timer.toc()
         
         stream = cp.cuda.Stream()
         with stream:
             if dark_flat is not None:
-                dark = cp.array(dark_flat[0][z_pt:z_pt+nc,...])
-                flat = cp.array(dark_flat[1][z_pt:z_pt+nc,...])
+                dark = cp.array(np.float32(dark_flat[0][z_pt:z_pt+nc,...]), dtype = cp.float32)
+                flat = cp.array(np.float32(dark_flat[1][z_pt:z_pt+nc,...]), dtype = cp.float32)
                 data[:] = preprocess(data.swapaxes(0,1), dark, flat).swapaxes(0,1)
         stream.synchronize()
 
@@ -232,113 +252,6 @@ def recon_patches_3d(projs, theta, center, p3d, TIMEIT = False, segmenter = None
         else:
             xchunk, t_gpu2cpu = extract_from_mask(obj_mask, cpts, p3d.wd)
             times.append([ntheta, nc, n, t_cpu2gpu, t_filt, t_mask, t_bp, t_gpu2cpu])
-
-
-        # APPEND AND GO TO NEXT CHUNK
-        x.append(xchunk)
-        pbar.update(1)
-        
-    pbar.close()
-
-    device.synchronize()
-    del obj_mask, data, theta, center, data_padded, data0, t, wfilter    
-    
-    memory_pool.free_all_blocks()    
-    cpts_all = np.concatenate(cpts_all, axis = 0)
-    x = np.concatenate(x, axis = 0)
-    
-    
-    p3d = Grid(p3d.vol_shape, initialize_by = "data", \
-               points = cpts_all, width = p3d.wd)
-    if TIMEIT:
-        return x, p3d, np.asarray(times)
-    else:
-        return x, p3d
-
-
-def __recon_patches_3d(projs, theta, center, p3d, apply_fbp = True, TIMEIT = False, segmenter = None, segmenter_batch_size = 256, dark_flat = None, rec_min_max = None):
-
-    timer = TimerGPU("ms")
-    memory_pool = cp.cuda.MemoryPool()
-    cp.cuda.set_allocator(memory_pool.malloc)
-    device = cp.cuda.Device()
-    
-    z_pts = np.unique(p3d.points[:,0])
-    ntheta, nc, n = projs.shape[0], p3d.wd, projs.shape[2]
-    with cp.cuda.Stream() as stream:
-        data = cp.empty((ntheta, nc, n), dtype = cp.float32)
-        theta = cp.array(theta, dtype = cp.float32)
-        center = cp.float32(center)
-        obj_mask = cp.empty((nc, n, n), dtype = cp.float32)
-    
-        # fft stuff        
-        pad_left, pad_right = calc_padding(data.shape)    
-        data_padded = cp.empty((ntheta,nc,n+pad_left+pad_right), dtype = cp.float32)
-        data0 = cp.empty((ntheta,nc, (n+pad_left+pad_right)//2+1), dtype = cp.complex64)
-        plan_fwd = get_fft_plan(data_padded, axes=2, value_type='R2C')
-        plan_inv = get_fft_plan(rfft(data_padded,axis=2), axes=2, value_type='C2R')
-        t = rfftfreq(data_padded.shape[2])
-        wfilter = t.astype(cp.float32) #* (1 - t * 2)**3  # parzen
-    
-
-    x = []
-    times = []
-    cpts_all = []
-    from tqdm import tqdm
-    pbar = tqdm(total=len(z_pts))
-    
-    for z_pt in z_pts:
-        cpts = p3d.filter_by_condition(p3d.points[:,0] == z_pt).points
-        cpts_all.append(cpts.copy())
-        cpts[:,0] = 0
-        
-        # COPY DATA TO GPU
-        stream = cp.cuda.Stream()
-        timer.tic()
-        with stream:
-            data.set(projs[:,z_pt:z_pt+nc,:].astype(np.float32))
-        stream.synchronize()
-        t_cpu2gpu = timer.toc()
-        
-        stream = cp.cuda.Stream()
-        with stream:
-            if dark_flat is not None:
-                dark = cp.array(dark_flat[0][z_pt:z_pt+nc,...])
-                flat = cp.array(dark_flat[1][z_pt:z_pt+nc,...])
-                t_prep = preprocess(data, dark, flat)
-        stream.synchronize()
-
-        # FBP FILTER
-        timer.tic()
-        with plan_fwd:
-            # filter mask and fft
-            #(1 - t * 2)**3  # parzen
-            data_padded[:] = cp.pad(data, ((0,0),(0,0),(pad_left, pad_right)), mode = 'edge')
-            data0[:] = wfilter*rfft(data_padded, axis=2)
-            
-        with plan_inv:
-            # inverse fft
-            data[:] = irfft(data0, axis=2)[...,pad_left:-pad_right]
-        t_filt = timer.toc()
-            
-        stream = cp.cuda.Stream()
-        with stream:
-            # BACK-PROJECTION
-            t_mask = make_mask(obj_mask, cpts, p3d.wd)
-            t_bp = rec_mask(obj_mask, data, theta, center)
-        stream.synchronize()
-        
-        # EXTRACT PATCHES AND SEND TO CPU
-        if segmenter is not None:
-            # do segmentation
-            xchunk = extract_segmented(obj_mask, cpts, p3d.wd, segmenter, segmenter_batch_size, rec_min_max)
-            # xchunk = extract_segmented_cpu(obj_mask, cpts, p3d.wd, segmenter, segmenter_batch_size, rec_min_max)
-            times.append([ntheta, nc, n, t_cpu2gpu, t_filt, t_mask, t_bp])
-            pass
-        else:
-            xchunk, t_gpu2cpu = extract_from_mask(obj_mask, cpts, p3d.wd)
-            times.append([ntheta, nc, n, t_cpu2gpu, t_filt, t_mask, t_bp, t_gpu2cpu])
-
 
         # APPEND AND GO TO NEXT CHUNK
         x.append(xchunk)
@@ -379,7 +292,6 @@ def extract_from_mask(obj_mask, cpts, wd):
     # print(f"overhead for extracting sub_vols to cpu: {t_gpu2cpu:.2f} ms")        
     
     return sub_vols, t_gpu2cpu
-
 
 def extract_segmented(obj_mask, cpts, wd, segmenter, batch_size, rec_min_max):
     
@@ -475,9 +387,6 @@ def extract_segmented_cpu(obj_mask, cpts, wd, segmenter, batch_size, rec_min_max
         ib+=1
     sub_vols = np.concatenate(sub_vols, axis = 0)
     return sub_vols
-
-
-
 
 def make_mask(obj_mask, corner_pts, wd):
     # MAKE OBJ_MASK FROM PATCH COORDINATES

@@ -7,12 +7,13 @@ import matplotlib.pyplot as plt
 import os
 import h5py
 import sys
-from tomo_encoders import Patches, DataFile
+from tomo2mesh import DataFile
 import tensorflow as tf
 import time
 
-from tomo_encoders.neural_nets.surface_segmenter import SurfaceSegmenter
-from tomo_encoders.misc.feature_maps_vis import view_midplanes
+from tomo2mesh.unet3d.surface_segmenter import SurfaceSegmenter
+from tomo2mesh.projects.steel_part_vis.rw_utils import model_path
+
 
 ######## START GPU SETTINGS ############
 ########## SET MEMORY GROWTH to True ############
@@ -25,8 +26,8 @@ except:
 ######### END GPU SETTINGS ############
 
 # INPUT SIZE CHANGE
-sys.path.append('/home/atekawade/TomoEncoders/scratchpad/voids_paper/configs')
-from params import *
+
+from tomo2mesh.porosity.params_3dunet import *
 
 def fit(fe, Xs, Ys):
     

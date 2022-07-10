@@ -11,18 +11,16 @@ import sys
 import pandas as pd
 import cupy as cp
 from tomo2mesh import Grid
-from tomo2mesh.fbp.recon import recon_patches_3d
+from tomo2mesh.fbp.subset import recon_patches_3d
 import pandas as pd
 from tomo2mesh.misc.voxel_processing import TimerGPU
 
 
 N_ITERS = 5
-from tomo2mesh.projects.subset_processing.utils import time_logs as output_path
-n = 4096
-ntheta = 3000
+from tomo2mesh.projects.steel_part_vis.rw_utils import time_logs as output_path
 nc = 32
 n_iter = 5
-tag = 'p3d_fbp'
+tag = 'subsetrec'
 
 
 def run(data_cpu, theta, center, r_fac, n_iter, nc):
@@ -46,14 +44,22 @@ def run(data_cpu, theta, center, r_fac, n_iter, nc):
     sub_vols, p_sel, times = recon_patches_3d(data_cpu, theta, center, p_sel, TIMEIT = True)
     timer_tot.toc()
     
-    columns = ["ntheta", "nz", "n", "t_cpu2gpu", "t_filt", "t_mask", "t_bp", "t_gpu2cpu"]
-    df = pd.DataFrame(data = np.median(times, axis=0).reshape(1,-1), columns = columns)
+    columns = ["t_cpu2gpu", "t_filt", "t_mask", "t_bp", "t_gpu2cpu"]
+    
+    df = pd.DataFrame(data = np.median(times, axis=0)[3:].reshape(1,-1), columns = columns)
     df["r_fac"] = r_fac
     # print(df)
-    print(pd.DataFrame(data = times, columns = columns))
+    print(pd.DataFrame(data = times[:,3:], columns = columns))
     return df
 
 if __name__ == "__main__":
+
+    if str(sys.argv[1]) == "2k":
+        n = 2048
+        ntheta = 1500
+    elif str(sys.argv[1]) == "4k":
+        n = 4096
+        ntheta = 3000
 
 
     # experiment 1

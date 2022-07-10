@@ -8,7 +8,7 @@ from tomo2mesh.misc.voxel_processing import TimerGPU, cylindrical_mask, edge_map
 import cupy as cp
 import numpy as np
 from tomo2mesh import Grid
-from tomo2mesh.projects.subset_processing.fbp import recon_all_gpu, recon_all, recon_patches_3d
+from tomo2mesh.fbp.subset import recon_all_gpu, recon_all, recon_patches_3d
 from tomo2mesh.structures.voids import Voids
 from skimage.filters import threshold_otsu
 from cupyx.scipy import ndimage
@@ -51,38 +51,6 @@ def coarse_map(projs, theta, center, b, b_K, dust_thresh):
     memory_pool.free_all_blocks()    
     return voids_b
 
-def coarse_map2(projs, theta, center, b, b_K, wd):
-    t_gpu = TimerGPU("secs")
-    t_gpu.tic()
-    V = recon_all(projs[::b_K,::b,::b], theta[::b_K,...], center/b, wd)
-    t_rec = t_gpu.toc('COARSE RECON')
-    t_gpu.tic()
-    voxel_values = get_values_cyl_mask(V[::4,::4,::4], 1.0)
-    thresh = np.float32(threshold_otsu(voxel_values))
-    V = (V < thresh).astype(np.uint8)
-    voids_b = Voids().count_voids(V, b)
-    t_label = t_gpu.toc('LABELING')
-    voids_b.compute_time = {"reconstruction" : t_rec, "labeling" : t_label}
-    return voids_b
-
-def coarse_map_surface(V_bin, b, wd):
-    
-    # find patches on surface
-    V_edge = edge_map(V_bin)
-    wdb = int(wd//b)
-    p3d = Grid(V_bin.shape, width = wdb)
-    
-    is_surf = (np.sum(p3d.extract(V_edge), axis = (1,2,3)) > 0.0).astype(np.uint8)
-    is_zeros = (np.sum(p3d.extract(V_bin), axis = (1,2,3)) == 0.0).astype(np.uint8)
-    
-    p3d = p3d.rescale(b)
-    p3d_surf = p3d.filter_by_condition(is_surf)
-    p3d_zeros = p3d.filter_by_condition(is_zeros)
-    
-    eff = len(p3d_surf)*(wd**3)/np.prod(p3d_surf.vol_shape)
-    print(f"\tSTAT: r value: {eff*100.0:.2f}")        
-    return p3d_surf, p3d_zeros
-
 def process_subset(projs, theta, center, fe, p_surf, min_max):
 
     if 1: # seg_batch argument deprecated
@@ -97,6 +65,39 @@ def process_subset(projs, theta, center, fe, p_surf, min_max):
         x_surf = fe.predict_patches("segmenter", x_surf[...,np.newaxis], 64, None, min_max = min_max)[...,0]
     print(f'\tSTAT: total patches in neighborhood: {len(p_surf)}')    
     return x_surf, p_surf
+
+# def coarse_map2(projs, theta, center, b, b_K, wd):
+#     t_gpu = TimerGPU("secs")
+#     t_gpu.tic()
+#     V = recon_all(projs[::b_K,::b,::b], theta[::b_K,...], center/b, wd)
+#     t_rec = t_gpu.toc('COARSE RECON')
+#     t_gpu.tic()
+#     voxel_values = get_values_cyl_mask(V[::4,::4,::4], 1.0)
+#     thresh = np.float32(threshold_otsu(voxel_values))
+#     V = (V < thresh).astype(np.uint8)
+#     voids_b = Voids().count_voids(V, b)
+#     t_label = t_gpu.toc('LABELING')
+#     voids_b.compute_time = {"reconstruction" : t_rec, "labeling" : t_label}
+#     return voids_b
+
+# def coarse_map_surface(V_bin, b, wd):
+    
+#     # find patches on surface
+#     V_edge = edge_map(V_bin)
+#     wdb = int(wd//b)
+#     p3d = Grid(V_bin.shape, width = wdb)
+    
+#     is_surf = (np.sum(p3d.extract(V_edge), axis = (1,2,3)) > 0.0).astype(np.uint8)
+#     is_zeros = (np.sum(p3d.extract(V_bin), axis = (1,2,3)) == 0.0).astype(np.uint8)
+    
+#     p3d = p3d.rescale(b)
+#     p3d_surf = p3d.filter_by_condition(is_surf)
+#     p3d_zeros = p3d.filter_by_condition(is_zeros)
+    
+#     eff = len(p3d_surf)*(wd**3)/np.prod(p3d_surf.vol_shape)
+#     print(f"\tSTAT: r value: {eff*100.0:.2f}")        
+#     return p3d_surf, p3d_zeros
+
     
     
     

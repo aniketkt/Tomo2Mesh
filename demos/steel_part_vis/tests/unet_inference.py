@@ -8,7 +8,7 @@ import cupy as cp
 from tomo2mesh.unet3d.surface_segmenter import SurfaceSegmenter
 import os 
 import tensorflow as tf
-from tomo2mesh.projects.subset_processing.params import *
+from tomo2mesh.porosity.params_3dunet import *
 from tomo2mesh.misc.voxel_processing import TimerGPU
 #### THIS EXPERIMENT ####
 wd = 32

@@ -3,9 +3,6 @@
 """ 
 """ 
 
-# to-do: get these inputs from command line or config file
-model_path = '/data02/MyArchive/aisteer_3Dencoders/models/void_segmenter'
-gpu_mem_limit = 48.0
 
 ############ MODEL PARAMETERS ############
 def get_training_params(TRAINING_INPUT_SIZE):
@@ -104,12 +101,7 @@ def get_model_params(model_tag):
 
 if __name__ == "__main__":
 
-    fe = SurfaceSegmenter(model_initialization = 'define-new', \
-#                          input_size = , \
-                         descriptor_tag = "M_a01",\
-                         gpu_mem_limit = gpu_mem_limit,\
-                         **model_params)        
-    
+    print("parameters for the compact 3D U-net")    
 
     
     
