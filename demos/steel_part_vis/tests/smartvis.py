@@ -34,8 +34,8 @@ except:
 ######### END GPU SETTINGS ############
 
 
-b_val = int(sys.argv[1])
-b, b_K = b_val, b_val
+
+
 
 
 
@@ -61,16 +61,19 @@ criteria_list = ["spherical_neighborhood", "cylindrical_neighborhood", "none"]
 
 if __name__ == "__main__":
     
+    vol_name = str(sys.argv[1])
+
     # read data and initialize output arrays
     print("BEGIN: Read projection data from disk")
-    if b == 2:
+
+    if vol_name == "2k":
+        b, b_K = 2, 2
         pixel_size = 2.34
         projs, theta, center = read_raw_data_b2()
-        kval = '2k'
-    elif b == 4:
+    elif vol_name == "4k":
+        b, b_K = 4, 4
         pixel_size = 1.17
         projs, theta, center = read_raw_data_b1()
-        kval = '4k'
     else:
         raise NotImplementedError("unacceptable value")
     
@@ -107,11 +110,17 @@ if __name__ == "__main__":
         t_mesh = t_gpu.toc()
         
         print("saving voids data now...")
-        surf_b.write_ply(os.path.join(ply_dir, f"voids_{kval}_b_{b}_{criteria}.ply"))
-        surf.write_ply(os.path.join(ply_dir, f"voids_{kval}_{b}_subset_{criteria}.ply"))
-        print(os.path.join(ply_dir, f"voids_{kval}_{b}_subset_{criteria}.ply"))
-        print(f"CRITERIA: {criteria}; t_mapping: {t_mapping:.2f} secs; t_mesh: {t_mesh:.2f} secs; 1/r value: {1/r_fac:.4g}")
+        t_gpu.tic()
 
+        if criteria == "none":
+            voids_b.write_to_disk(os.path.join(voids_dir,f"voids_{vol_name}_b_{b}"))
+            voids.write_to_disk(os.path.join(voids_dir,f"voids_{vol_name}_b_{b}_subset"))
+            
+        surf_b.write_ply(os.path.join(ply_dir, f"voids_{vol_name}_b_{b}_{criteria}.ply"))
+        surf.write_ply(os.path.join(ply_dir, f"voids_{vol_name}_{b}_subset_{criteria}.ply"))
+        print(os.path.join(ply_dir, f"voids_{vol_name}_{b}_subset_{criteria}.ply"))
+        print(f"\nCRITERIA: {criteria}; t_mapping: {t_mapping:.2f} secs; t_mesh: {t_mesh:.2f} secs; 1/r value: {1/r_fac:.4g}\n")
+        t_gpu.toc("saving data")
 
     
     

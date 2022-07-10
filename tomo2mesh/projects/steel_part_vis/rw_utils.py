@@ -13,6 +13,8 @@ b = 4
 b_K = 4
 wd = 32
 
+base_fpath = '/data02/MyArchive/tomo_datasets/data_porosity_mapping_paper'
+
 # detailed mapping parameters
 pixel_res = 1.17
 size_um = -1 # um
@@ -26,16 +28,14 @@ model_names = {"segmenter" : "segmenter_Unet_%s"%model_tag}
 
 
 ## file names
-raw_fname = '/data02/MyArchive/aisteer_3Dencoders/tmp_data/mosaic_raw/all_layers_16bit.hdf5'
-raw_fname_b2 = '/data02/MyArchive/aisteer_3Dencoders/tmp_data/mosaic_raw/all_layers_b2_16bit.hdf5'
-voids_dir = '/data02/MyArchive/aisteer_3Dencoders/tmp_data/voids_data'
-data_output = '/data02/MyArchive/aisteer_3Dencoders/tmp_data/output_vis'
-time_logs = '/data02/MyArchive/aisteer_3Dencoders/tmp_data/time_logs'
-ply_dir = '/data02/MyArchive/aisteer_3Dencoders/tmp_data/ply'
-rec_dir = '/data02/MyArchive/aisteer_3Dencoders/tmp_data/full_rec'
-model_path = '/data02/MyArchive/aisteer_3Dencoders/models/void_segmenter'
-ply_subset = os.path.join(ply_dir, 'subset.ply')
-ply_coarse = os.path.join(ply_dir, 'coarse.ply')
+raw_fname = os.path.join(base_fpath, 'mosaic_raw/all_layers_16bit.hdf5')
+raw_fname_b2 = os.path.join(base_fpath, 'mosaic_raw/all_layers_b2_16bit.hdf5')
+voids_dir = os.path.join(base_fpath,'voids_data')
+data_output = os.path.join(base_fpath, 'output_vis')
+time_logs = os.path.join(base_fpath,'time_logs')
+ply_dir = os.path.join(base_fpath, 'ply')
+rec_dir = os.path.join(base_fpath, 'full_rec')
+model_path = os.path.join(base_fpath, 'models_unet')
 
 if not os.path.exists(time_logs):
     os.makedirs(time_logs)

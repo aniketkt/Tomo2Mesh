@@ -34,9 +34,7 @@ except:
 ######### END GPU SETTINGS ############
 
 
-b_val = int(sys.argv[1])
-b, b_K = b_val, b_val
-n_iter = 5
+
 # logging measurements
 t_gpu = TimerGPU("secs")
 keys = ["b", "sparsity", "r_fac_z", "voids", \
@@ -54,10 +52,25 @@ segmenter = SurfaceSegmenter(model_initialization = 'load-model', \
 
 
 if __name__ == "__main__":
-    
+
+    vol_name = str(sys.argv[1])
+    b = int(sys.argv[2])
+    b_K = b
+
+
+    if vol_name == "2k":
+        n_iter = 5
+        projs, theta, center = read_raw_data_b2()
+    elif vol_name == "4k":
+        n_iter = 3
+        projs, theta, center = read_raw_data_b1()
+
+
+
+
     # read data and initialize output arrays
     print("BEGIN: Read projection data from disk")
-    projs, theta, center = read_raw_data_b2()
+    
     ##### BEGIN ALGORITHM ########
     # coarse mapping
     
@@ -84,6 +97,8 @@ if __name__ == "__main__":
         x_voids, p_voids = process_subset(projs, theta, center, segmenter, p_voids, voids_b["rec_min_max"])
         t_rec_subset.append(t_gpu.toc("subset reconstruction"))
         z_pts = np.unique(p_voids.points[:,0])
+        cp._default_memory_pool.free_all_blocks()   
+        cp.fft.config.get_plan_cache().clear()
 
 
     t_label_subset = []
@@ -99,20 +114,11 @@ if __name__ == "__main__":
     df["label-subset"] = t_label_subset
     df["sparsity"] = [1/r_fac]*n_iter
     df["voids"] = [voids_b.n_voids]*n_iter
-    df["b"] = [b_val]*n_iter
+    df["b"] = [b]*n_iter
     df["r_fac_z"] = [len(z_pts)/(p_voids.vol_shape[0]//wd)]*n_iter
     print(df)
-    df.to_csv(os.path.join(time_logs, f"coarse2fine_{b}.csv"), index = False, mode = 'w')
+    df.to_csv(os.path.join(time_logs, f"coarse2fine_{vol_name}_{b}.csv"), index = False, mode = 'w')
     
-    # print("saving voids data now...")
-    # t_gpu.tic()
-    # voids_b.write_to_disk(os.path.join(voids_dir,f"voids_b_{b}"))
-    # surf_b = voids_b.export_void_mesh_with_texture("sizes", edge_thresh = 1.0)
-    # surf_b.write_ply(os.path.join(ply_dir, f"voids_b_{b}.ply"))
-    # voids.write_to_disk(os.path.join(voids_dir,f"voids_b_{b}_subset"))
-    # surf = voids.export_void_mesh_with_texture("sizes", edge_thresh = 1.0)
-    # surf.write_ply(os.path.join(ply_dir, f"voids_b_{b}_subset.ply"))
-    # t_gpu.toc("saving data")
     
 
         
