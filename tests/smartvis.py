@@ -61,7 +61,6 @@ criteria_list = ["spherical_neighborhood", "cylindrical_neighborhood", "none"]
 
 if __name__ == "__main__":
     
-    vol_name = str(sys.argv[1])
 
     # read data and initialize output arrays
     print("BEGIN: Read projection data from disk")
