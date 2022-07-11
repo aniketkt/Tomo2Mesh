@@ -12,7 +12,7 @@ import tensorflow as tf
 import time
 
 from tomo2mesh.unet3d.surface_segmenter import SurfaceSegmenter
-from tomo2mesh.projects.steel_part_vis.rw_utils import model_path
+from tomo2mesh.projects.steel_am.rw_utils import model_path
 
 
 ######## START GPU SETTINGS ############

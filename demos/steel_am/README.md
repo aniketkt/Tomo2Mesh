@@ -18,7 +18,7 @@ To run the code, download the data and trained U-net model from the globus endpo
 python demos/steel_am/tests/smartvis.py  
 ```   
 
-It should output .ply files that can be viewed in a visualization software of your choice. We recommend Paraview to view the render the texture correctly. Here, the colormap scales with void size.  
+It should output .ply files that can be viewed in a visualization software of your choice. We recommend Paraview to render the texture correctly. Here, the colormap scales with void size.  
 
 
 <p align="center">  

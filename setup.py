@@ -16,10 +16,8 @@ setup(
     packages= ['tomo2mesh', 'tomo2mesh.fbp', 'tomo2mesh.misc', 'tomo2mesh.structures', 'tomo2mesh.unet3d', 'tomo2mesh.projects', 'tomo2mesh.porosity'],
     # Needed for dependencies
     install_requires=['numpy', 'pandas', 'scipy', 'h5py', 'matplotlib', 'scikit-image',\
-                      'ConfigArgParse', 'tqdm', 'ipython', 'seaborn', 'itertools', 'multiprocessing',\
-                        'functools', 'mpl_toolkits', 'vtk', 'vtkmodules', 'os', 'operator',\
-                        'cupy', 'epics', 'tensorflow', 'pandas', 'abc', 'glob', 'audioop', 'shutil', 'tifffile',\
-                        'ast', 'pymesh', 'tabulate', 'pyrsistent'],
+                      'tqdm', 'ipython', 'seaborn',\
+                      'pandas', 'tifffile'],
     version=open('VERSION').read().strip(),
     license='BSD',
     description='Toolkit for reconstructing tomography data as a polygonal mesh',

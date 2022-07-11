@@ -17,7 +17,7 @@ from tomo2mesh.misc.voxel_processing import TimerGPU
 
 
 N_ITERS = 5
-from tomo2mesh.projects.steel_part_vis.rw_utils import time_logs as output_path
+from tomo2mesh.projects.steel_am.rw_utils import time_logs as output_path
 nc = 32
 n_iter = 5
 tag = 'subsetrec'

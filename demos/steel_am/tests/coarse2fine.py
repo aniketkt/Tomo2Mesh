@@ -14,10 +14,10 @@ import pandas as pd
 import cupy as cp
 import tensorflow
 
-from tomo2mesh.porosity.mapping import coarse_map, process_subset
+from tomo2mesh.projects.steel_am.coarse2fine import coarse_map, process_subset
 from tomo2mesh.misc.voxel_processing import TimerGPU
 from tomo2mesh.structures.voids import Voids
-from tomo2mesh.projects.steel_part_vis.rw_utils import *
+from tomo2mesh.projects.steel_am.rw_utils import *
 from tomo2mesh.porosity.params_3dunet import *
 from tomo2mesh.unet3d.surface_segmenter import SurfaceSegmenter
 
