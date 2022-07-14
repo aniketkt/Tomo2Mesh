@@ -13,7 +13,8 @@ detector_dist = 15.0 # cm
 
 #save_path = "/data01/Eaton_Polymer_AM/csv_files/data_map_1X.csv"
 save_path = "/data01/Eaton_Polymer_AM/csv_files/data_map_1X_07082022.csv"
-data_path = '/data01/Eaton_Polymer_AM/raw_data/'
+#data_path = '/data01/Eaton_Polymer_AM/raw_data/'
+data_path = '/data01/Eaton_Polymer_AM/raw_data2/'
 voids_path = '/data01/Eaton_Polymer_AM/voids_data'
 
 

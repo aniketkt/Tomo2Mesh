@@ -1,17 +1,18 @@
 #!/bin/bash
 
-python plot_eaton_graphs.py "1" "1" "4" "1"
-python plot_eaton_graphs.py "2" "1" "5" "2"
-python plot_eaton_graphs.py "3" "1" "5" "3"
-python plot_eaton_graphs.py "4" "1" "4" "45"
-python plot_eaton_graphs.py "5" "7" "10" "45"
-# python plot_eaton_graphs.py "6" "1" "4" "67"
-# python plot_eaton_graphs.py "7" "7" "10" "67"
-python plot_eaton_graphs.py "8" "1" "4" "89"
-python plot_eaton_graphs.py "9" "7" "10" "89"
-python plot_eaton_graphs.py "10" "1" "4" "1011"
-python plot_eaton_graphs.py "11" "7" "10" "1011"
-python plot_eaton_graphs.py "12" "1" "2" "12"
+python plot_eaton_graphs_ae.py "1"
+python plot_eaton_graphs_ae.py "9"
+python plot_eaton_graphs_ae.py "2"
+python plot_eaton_graphs_ae.py "3"
+python plot_eaton_graphs_ae.py "4"
+python plot_eaton_graphs_ae.py "5"
+python plot_eaton_graphs_ae.py "6"
+python plot_eaton_graphs_ae.py "7"
+python plot_eaton_graphs_ae.py "8"
+python plot_eaton_graphs_ae.py "10"
+python plot_eaton_graphs_ae.py "11"
+python plot_eaton_graphs_ae.py "12"
+python plot_eaton_graphs_ae.py "injmold"
 
 # for val in {1..12}; do
     # if [[$val -eq 1]]; then

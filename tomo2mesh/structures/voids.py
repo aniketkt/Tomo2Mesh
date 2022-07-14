@@ -339,7 +339,12 @@ class Voids(dict):
         self["x_voids"] = []
         self["s_voids"] = []
         
+
+
         for idx, s in enumerate(slices):
+
+            if s is None:
+                continue
 
             cpt = np.asarray([s[i3].start for i3 in range(3)])
             ept = np.asarray([s[i3].stop for i3 in range(3)])
@@ -731,6 +736,7 @@ def void2mesh_mproc(x_voids, cpts, tex_vals, edge_thresh, b):
         faces.append(np.array(fc) + id_len)
         texture.append(tex)
         id_len = id_len + len(vx)
+
 
     # normalize colormap
     texture = np.concatenate(texture, axis = 0)

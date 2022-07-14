@@ -10,7 +10,7 @@ import sys
 import os
 
 #from tomo2mesh.projects.eaton.rw_utils import read_raw_data_1X, save_path
-from Tomo2Mesh.tomo2mesh.projects.eaton.rw_utils_ae import read_raw_data_1X, save_path
+from tomo2mesh.projects.eaton.rw_utils_ae import read_raw_data_1X, save_path
 from tomo2mesh.projects.eaton.void_mapping import void_map_gpu, void_map_all
 from tomo2mesh.projects.eaton.params import pixel_size_1X as pixel_size
 plots_dir = '/home/yash/eaton_plots/'
@@ -107,57 +107,82 @@ def crack_orientation(voids, cutoff = 3.0):
 
 def merge_void_layers(sample_tag, b, raw_pixel_size, number_density_radius = 50):
 
-    info = rdf[(str(rdf["sample_num"]) == str(sample_tag))]
-    scan_num = info["scan_num"]
-    y_pos_list = info['sample_y']
+    info = rdf[(rdf["sample_num"] == str(sample_tag))]
+    scan_num = list(info["scan_num"])
+    y_pos_list = list(info['y_pos'])
 
     y_pos_list = np.asarray(y_pos_list)*1.0e3/(raw_pixel_size*b)
-    y_pos_list = y_pos_list - y_pos_list[0]
+    y_pos_list = (y_pos_list - y_pos_list[0]).astype(np.uint64)
+    
+    # y_pos_list[0] += 1536//2//b
     z_max = np.uint32(np.diff(y_pos_list))
+    
 
-    for ii, scan_tag in enumerate(range(scan_num[0], scan_num[-1])): 
+    voids_all = VoidLayers()
+    voids_all["porosities"] = []
+    for ii, scan_tag in enumerate(range(scan_num[0], scan_num[-1]+1)): 
         projs, theta, center, dark, flat = read_raw_data_1X(sample_tag, scan_tag)
-        voids = void_map_gpu(projs, theta, center, dark, flat, b, raw_pixel_size)
-        #cp._default_memory_pool.free_all_blocks(); cp.fft.config.get_plan_cache().clear()  
-        #voids = void_map_all(projs, theta, center, dark, flat, b, raw_pixel_size)
-        print(f"BOUNDARY SHAPE: {voids['x_boundary'].shape}")
+        
+        if ii==0:
+            z_crop = (1536//2,1536)
+        elif scan_tag == scan_num[-1]:
+            z_crop = (0,1536//2)
+        else:
+            z_crop = (0,1536)
+        cp._default_memory_pool.free_all_blocks(); cp.fft.config.get_plan_cache().clear()  
+        
+        voids = void_map_all(projs, theta, center, dark, flat, b, raw_pixel_size, z_crop)
+        # voids = void_map_gpu(projs, theta, center, dark, flat, b, raw_pixel_size)
+        # print(f"BOUNDARY SHAPE: {voids['x_boundary'].shape}")
         # voids.select_by_size(100.0, pixel_size_um = pixel_size) # remove later
 
         if scan_tag != scan_num[-1]:
-            print(f"z_max: {z_max}")
+            # print(f"z_max: {z_max}")
             voids.select_by_z_coordinate(z_max[ii]) #Find voids in each layer (w/o overlap)
             
         voids_all.add_layer(voids,y_pos_list[ii])
+        voids_all["porosities"].append(voids["porosity"])
         print("added a layer")
 
-    voids_all.calc_max_feret_dm()
-    voids_all.calc_number_density(number_density_radius)
+        # if ii==0:
+        #     break
+
+        if b == 1:
+            #import pdb; pdb.set_trace()
+            if str(sample_tag)=="1" and str(scan_num[0])=="124":
+                fpath = "/data01/Eaton_Polymer_AM/csv_files/porosity_vals_adj2.csv"
+                info = {"sample_tag": [sample_tag], "scan_tag": [scan_tag], "porosity": [voids["porosity"]]}
+                df2 = pd.DataFrame(info)
+                df2.to_csv(fpath)
+            else:
+                fpath = "/data01/Eaton_Polymer_AM/csv_files/porosity_vals_adj2.csv"
+                info = {"sample_tag": [sample_tag], "scan_tag": [scan_tag], "porosity": [voids["porosity"]]}
+                df2 = pd.DataFrame(info)
+                df2.to_csv(fpath, mode = 'a')
+
+    if b != 1:
+        voids_all.calc_max_feret_dm()
+        voids_all.calc_number_density(number_density_radius)
 
     return voids_all
 
 
-
-
 if __name__ == "__main__":
 
-    b = 4
-    # print(V[::4,::4,::4].shape)
-    # end_layer = 4
-    # sample_tag = '1'
+    b = 1
 
     sample_name = str(sys.argv[1])
-    start_layer = int(sys.argv[2])
-    end_layer = int(sys.argv[3])
-    sample_tag = str(sys.argv[4])
     
     z_max = []
     voids_list = []
-    voids_all = VoidLayers()
+    
     rdf = pd.read_csv(save_path)
     number_density_radius = 50
     
-    voids_all = merge_void_layers(sample_tag, b, pixel_size)
-    #voids_all.export_void_mesh_with_texture("number_density").write_ply(f'/data01/Eaton_Polymer_AM/ply_files/sample_{sample_name}_layers_{start_layer}_{end_layer}.ply')
+    voids_all = merge_void_layers(sample_name, b, pixel_size)
+    if b != 1:
+        #voids_all.export_void_mesh_with_texture("number_density").write_ply(f'/data01/Eaton_Polymer_AM/ply_files/sample_{sample_name}.ply')
+        voids_all.export_void_mesh_mproc("number_density", edge_thresh=1.0).write_ply(f'/data01/Eaton_Polymer_AM/ply_files/sample_{sample_name}.ply')
     voids_all.write_to_disk(f'/data01/Eaton_Polymer_AM/voids_data/sample{sample_name}_all_layers')
 
     exit()

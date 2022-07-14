@@ -44,6 +44,7 @@ class Patches(dict):
                         "slices" : self._from_slices,\
                         "grid" : self._set_grid, \
                         "regular-grid" : self._set_regular_grid, \
+                        "bestfit_grid" : self._set_regular_grid_bestfit, \
                         "octree-grid" : self._set_regular_grid,\
                         "multiple-grids" : self._set_multiple_grids, \
                         "random-fixed-width" : self._get_random_fixed_width, \
@@ -358,7 +359,69 @@ class Patches(dict):
             widths = widths[idxs,...].copy()
         
         return self.xp.asarray(points), self.xp.asarray(widths), False
-    
+
+
+
+    def _set_regular_grid_bestfit(self, patch_size = None, n_points = None):
+
+        '''
+        Initialize (n,3) points on the corner of volume patches placed on a grid. No overlap is used. Instead, the volume is cropped such that it is divisible by the patch_size in that dimension.  
+        
+        Parameters  
+        ----------  
+        patch_size : tuple  
+            A tuple of widths (or the smallest possible values thereof) of the patch volume  
+        
+        '''
+        
+        patch_size = self._check_stride(patch_size, 1)
+
+
+        
+        # Find optimum number of patches to cover full image
+        m = list(self.vol_shape)
+        p = list(patch_size)
+        
+        
+        nsteps = [int(np.ceil(m[i]/p[i])) for i in range(len(m))]
+        stepsize = patch_size
+        
+        points = []
+        if len(m) == 3:
+            for ii in range(nsteps[0]):
+                for jj in range(nsteps[1]):
+                    for kk in range(nsteps[2]):
+                        points.append([min(m[0]-p[0], ii*stepsize[0]), min(m[1]-p[1], jj*stepsize[1]),min(m[2]-p[2], kk*stepsize[2])])
+        elif len(m) == 2:
+            for ii in range(nsteps[0]):
+                for jj in range(nsteps[1]):
+                    points.append([min(m[0]-p[0], ii*stepsize[0]), min(m[1]-p[1], jj*stepsize[1])])
+        
+        
+        
+        widths = [list(patch_size)]*len(points)
+
+        if n_points is not None:
+            n_points = min(n_points, len(points))
+            points = self.xp.asarray(points)
+            widths = self.xp.asarray(widths)
+            # sample randomly
+            rng = default_rng()
+            idxs = self.xp.sort(rng.choice(points.shape[0], n_points, replace = False))
+            points = points[idxs,...].copy()
+            widths = widths[idxs,...].copy()
+        
+        return self.xp.asarray(points), self.xp.asarray(widths), False
+
+
+
+
+
+
+
+
+
+
     
     def _get_random_fixed_width(self, patch_size = None, n_points = None):
         """
