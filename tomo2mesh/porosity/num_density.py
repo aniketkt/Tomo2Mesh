@@ -9,6 +9,6 @@ def num_density(list_centers, radius):
     #count = np.array([np.count_nonzero(arr<=radius) for arr in dist])-1
     count = [np.count_nonzero(arr<=radius)-1 for arr in dist]
     #rho = count/((4/3)*np.pi*radius**3) 
-    return count
+    return np.asarray(count)
     #return rho
 

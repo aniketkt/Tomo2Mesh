@@ -12,6 +12,7 @@ import tensorflow as tf
 # from cupyx.scipy.fft import rfft, irfft, rfftfreq
 import tqdm
 from cupyx.scipy.fft import rfft, irfft, rfftfreq, get_fft_plan
+from cupyx.scipy.ndimage import gaussian_filter as gaussian_filter_cp
 from tomo2mesh import Grid
 # from cupyx.scipy import ndimage
 from tomo2mesh.fbp.cuda_kernels import rec_mask, rec_all
@@ -97,6 +98,7 @@ def recon_all(projs, theta, center, nc, dark_flat = None, sinogram_order = True)
 def recon_all_gpu(projs, theta, center, dark_flat = None, sinogram_order = True):
     '''reconstruct with full projection array on gpu and apply some convolutional filters in post-processing
     projection array must fit in GPU memory'''    
+    
     
     if not sinogram_order:
         projs = projs.swapaxes(0,1)
@@ -331,6 +333,10 @@ def extract_segmented(obj_mask, cpts, wd, segmenter, batch_size, rec_min_max):
                 yp[:] = cp.clip(yp, *rec_min_max)
                 min_val, max_val = rec_min_max
                 yp[:] = (yp - min_val) / (max_val - min_val)
+
+                # GAUSSIAN FILTER
+                yp[:] = gaussian_filter_cp(yp, 0.5)
+
                 # use DLPack here as yp is cupy array                
                 cap = yp.toDlpack()
                 yp_in = tf.experimental.dlpack.from_dlpack(cap)

@@ -341,9 +341,10 @@ class Grid(dict):
         fill patches in volume or image (3d or 2d patches)
         '''
         
-        s = self.slices()
+        # s = self.slices()
         for idx in range(len(self)):
-                vol_out[tuple(s[idx,...])] = sub_vols[idx]
+                s = tuple([slice(self.points[idx,i3], self.points[idx,i3] + self.wd) for i3 in range(3)])
+                vol_out[s] = sub_vols[idx]
             
         return
     

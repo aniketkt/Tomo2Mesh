@@ -1,18 +1,18 @@
 #!/bin/bash
 
 python plot_eaton_graphs_ae.py "1"
-python plot_eaton_graphs_ae.py "9"
-python plot_eaton_graphs_ae.py "2"
-python plot_eaton_graphs_ae.py "3"
-python plot_eaton_graphs_ae.py "4"
-python plot_eaton_graphs_ae.py "5"
-python plot_eaton_graphs_ae.py "6"
-python plot_eaton_graphs_ae.py "7"
-python plot_eaton_graphs_ae.py "8"
-python plot_eaton_graphs_ae.py "10"
-python plot_eaton_graphs_ae.py "11"
-python plot_eaton_graphs_ae.py "12"
-python plot_eaton_graphs_ae.py "injmold"
+# python plot_eaton_graphs_ae.py "9"
+# python plot_eaton_graphs_ae.py "2"
+# python plot_eaton_graphs_ae.py "3"
+# python plot_eaton_graphs_ae.py "4"
+# python plot_eaton_graphs_ae.py "5"
+# python plot_eaton_graphs_ae.py "6"
+# python plot_eaton_graphs_ae.py "7"
+# python plot_eaton_graphs_ae.py "8"
+# python plot_eaton_graphs_ae.py "10"
+# python plot_eaton_graphs_ae.py "11"
+# python plot_eaton_graphs_ae.py "12"
+# python plot_eaton_graphs_ae.py "injmold"
 
 # for val in {1..12}; do
     # if [[$val -eq 1]]; then

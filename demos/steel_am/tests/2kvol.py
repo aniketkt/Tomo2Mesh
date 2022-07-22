@@ -21,7 +21,9 @@ from tomo2mesh.projects.steel_am.rw_utils import *
 from tomo2mesh.porosity.params_3dunet import *
 from tomo2mesh.unet3d.surface_segmenter import SurfaceSegmenter
 from tomo2mesh import Grid, DataFile
+from tomo2mesh.misc.voxel_processing import cylindrical_mask
 from scipy.ndimage import label as label_np
+import cc3d
 
 ######## START GPU SETTINGS ############
 ########## SET MEMORY GROWTH to True ############
@@ -73,6 +75,8 @@ if __name__ == "__main__":
     x_rec, p_full = process_subset(projs, theta, center, None, p_full, rec_min_max)
     V = np.empty((nz,n,n), dtype = np.float32)
     p_full.fill_patches_in_volume(x_rec, V)
+    cylindrical_mask(V,0.95,rec_min_max[0])
+
     ds = DataFile(os.path.join(rec_dir, "2k_rec"), tiff = True, d_shape = V.shape, d_type = V.dtype)
     ds.create_new(overwrite=True)
     ds.write_full(V)
@@ -85,6 +89,8 @@ if __name__ == "__main__":
 
     V = np.empty((nz,n,n), dtype = np.uint8)
     p_full.fill_patches_in_volume(x_seg, V)
+    
+    cylindrical_mask(V,0.95,1)
     ds = DataFile(os.path.join(rec_dir, "2k_seg"), tiff = True, d_shape = V.shape, d_type = V.dtype)
     ds.create_new(overwrite=True)
     ds.write_full(V)
@@ -93,21 +99,28 @@ if __name__ == "__main__":
     t_label_subset = []
     for ib in range(n_iter):
         t_gpu.tic()
-        Vl, n_det = label_np(V, structure = np.ones((3,3,3),dtype=np.uint8))
-        voids = Voids().count_voids(Vl, 1, 2)
+        # Vl, n_det = label_np(V, structure = np.ones((3,3,3),dtype=np.uint8))
+        Vl = cc3d.connected_components(V)
+        voids = Voids().count_voids(Vl, 1, 2, pad_bb = 2)
         t_label_subset.append(t_gpu.toc("subset relabeling"))
+
+    idxs = np.where(voids["sizes"] > 3**3)[0]
+    voids.select_by_indices(idxs)
 
     print("this are the time measurements")
     df["reconstruct-subset"] = t_rec_subset
     df["label-subset"] = t_label_subset
     df["voids"] = [len(voids)]*n_iter
+    df["b"] = [1]*n_iter
+    df["sparsity"] = [1.0]*n_iter
     print(df)
+    df.to_csv(os.path.join(time_logs, f"coarse2fine_2k_1.csv"), index = False, mode = 'w')
     
     print("saving voids data now...")
     t_gpu.tic()
     voids.write_to_disk(os.path.join(voids_dir,f"voids_b_1"))
-    surf = voids.export_void_mesh_with_texture("sizes", edge_thresh = 1.0)
-    surf.write_ply(os.path.join(ply_dir, f"voids_b_{1}.ply"))
+    # surf = voids.export_void_mesh_mproc("sizes", edge_thresh = 1.0)
+    # surf.write_ply(os.path.join(ply_dir, f"voids_b_{1}.ply"))
     t_gpu.toc("saving data")
     
 

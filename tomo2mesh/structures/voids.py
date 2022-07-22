@@ -3,6 +3,7 @@
 """ 
 """ 
 
+from termios import NL0
 import cupy as cp
 import numpy as np
 from tomo2mesh import Grid
@@ -19,7 +20,8 @@ import pymesh
 from tomo2mesh.porosity.num_density import num_density
 import functools
 from multiprocessing import Pool, cpu_count
-
+import cc3d
+import pandas as pd
 
 class Surface(dict):
     def __init__(self, vertices, faces, texture = None):
@@ -83,7 +85,7 @@ class Surface(dict):
 
 class Voids(dict):
 
-    def __init__(self, pad_bb = 0):
+    def __init__(self):
 
         self["sizes"] = []
         self["cents"] = []
@@ -94,8 +96,7 @@ class Voids(dict):
         self["surfaces"] = []
         self.vol_shape = (None,None,None)
         self.b = 1
-        self.pad_bb = pad_bb
-        self.marching_cubes_algo = "skimage"#"vedo"
+        
 
         return
         
@@ -113,6 +114,21 @@ class Voids(dict):
 
     def __len__(self):
         return len(self["x_voids"])
+
+    def write_size_data(self, fpath):
+        
+        columns = ["sizes", "cptz", "cpty", "cptx", "eptz", "epty", "eptx"]
+        epts = []
+        for s_void in self["s_voids"]:
+            sz, sy, sx = s_void
+            epts.append([sz.stop, sy.stop, sx.stop])
+        epts = np.asarray(epts)
+        
+        rows = np.concatenate([self["sizes"].reshape(-1,1), self["cpts"], epts], axis = 1)
+        df = pd.DataFrame(columns = columns, data = rows)
+        df.to_csv(fpath.split('.')[0] + '.csv', index = False)
+        return
+
 
     def write_to_disk(self, fpath, overwrite = True):
 
@@ -209,6 +225,21 @@ class Voids(dict):
 
         return self
 
+    # def copy_from(self, voids):
+    #     import copy
+    #     self.vol_shape = voids.vol_shape
+    #     self.b = voids.b
+    #     for key in voids.keys():
+            
+    #         if key == "x_voids":
+    #             self[key] = [void.copy() for void in voids[key]]
+    #         elif key == "s_voids":
+    #             self[key] = copy.deepcopy(voids[key])
+    #         elif key == "x_boundary":
+    #             self[key] = voids[key].copy()
+    #         elif key in ["sizes", "cents", "cpts", "number_density",]
+
+
 
 
     # def copy_from(self, voids):
@@ -251,8 +282,6 @@ class Voids(dict):
 
 
 
-
-
     def import_from_grid(self, voids_b, x_grid, p_grid):
 
         '''import voids data from grid data
@@ -279,6 +308,8 @@ class Voids(dict):
         self.b = 1
         b = voids_b.b
 
+        from tqdm import tqdm
+        pbar = tqdm(total=len(voids_b))
         for iv, s_b in enumerate(voids_b["s_voids"]):
             s = tuple([slice(s_b[i].start*b, s_b[i].stop*b) for i in range(3)])
             void = Vp[s]
@@ -289,20 +320,22 @@ class Voids(dict):
             self["cpts"].append([int((s[i].start)) for i in range(3)])
 
             # make sure no other voids fall inside the bounding box
-            void, n_objs = label_np(void,structure = np.ones((3,3,3),dtype=np.uint8)) #8-connectivity
             
+            # void, n_objs = label_np(void,structure = np.ones((3,3,3),dtype=np.uint8)) #8-connectivity
+            void = cc3d.connected_components(void)
+            n_objs = void.max()
+
             # nv = np.asarray(void.shape).astype(np.uint32)
             # nv_cent = (nv//2).astype(np.uint32)
             # s_cent = tuple([slice(nv_cent[i3]-1, nv_cent[i3]+2) for i3 in range(3)])
-            # idx_cent = np.median(void[s_cent])
-            # void = (void == idx_cent).astype(np.uint8)
-            
-            
-            # _s = tuple([slice(self.pad_bb*self.b,-self.pad_bb*self.b)]*3)
-            # _idx = np.median(np.clip(void[_s],1,None))
-            # void = (void == _idx).astype(np.uint8)
+            # idx_cent = np.max(void[s_cent])
+            # if idx_cent > 0:
+            #     void = (void == idx_cent).astype(np.uint8)
+            # else:
+            #     void = np.zeros(void.shape, dtype = np.uint8)
 
             objs = find_objects(void)
+            
             counts = [np.sum(void[objs[i]] == i+1) for i in range(n_objs)]
             if len(counts) > 1:
                 i_main = np.argmax(counts)    
@@ -312,6 +345,8 @@ class Voids(dict):
 
             self["sizes"].append(np.sum(void))
             self["x_voids"].append(void)
+            pbar.update(1)
+        pbar.close()
 
         self["sizes"] = np.asarray(self["sizes"])
         self["cents"] = np.asarray(self["cents"])
@@ -327,7 +362,7 @@ class Voids(dict):
         return self
 
 
-    def count_voids(self, V_lab, b, dust_thresh, boundary_loc = (0,0,0)):
+    def count_voids(self, V_lab, b, dust_thresh, boundary_loc = (0,0,0), pad_bb = 0):
         self.dust_thresh = dust_thresh
         self.vol_shape = V_lab.shape
         boundary_id = V_lab[boundary_loc]
@@ -351,8 +386,10 @@ class Voids(dict):
             
             if not np.all(np.clip(ept-cpt-self.dust_thresh,0,None)):
                 continue
-            cpt = np.maximum(cpt-self.pad_bb, 0)
-            ept = np.minimum(ept+self.pad_bb, np.asarray(self.vol_shape))
+            if pad_bb > 0:
+                cpt = np.maximum(cpt-pad_bb, 0)
+                ept = np.minimum(ept+pad_bb, np.asarray(self.vol_shape))
+                
             s = tuple([slice(cpt[i3], ept[i3]) for i3 in range(3)])
             void = (V_lab[s] == idx+1)
             if idx + 1 == boundary_id:
@@ -368,8 +405,8 @@ class Voids(dict):
         self["cents"] = np.asarray(self["cents"])
         self["cpts"] = np.asarray(self["cpts"])
         self.b = b
-        self.n_voids = len(self["sizes"])
-        print(f"\tSTAT: voids found - {self.n_voids}")
+        
+        print(f"\tSTAT: voids found - {len(self['sizes'])}")
         
         return self
 
@@ -389,8 +426,12 @@ class Voids(dict):
             self["max_feret"]["phi"] = self["max_feret"]["phi"][idxs]
         
         if "number_density" in self.keys():
-            self["number_density"] = self["number_density"][idxs]
+            try:
+                self["number_density"] = self["number_density"][idxs]
+            except:
+                import pdb; pdb.set_trace()
 
+        print(f"\tSTAT: number of voids selected - {len(self['sizes'])}")
         return
 
     def select_by_z_coordinate(self, z_pt):
@@ -480,7 +521,8 @@ class Voids(dict):
         wd = wd//self.b
         V_bin = np.zeros(self.vol_shape, dtype = np.uint8)
         for ii, s_void in enumerate(self["s_voids"]):
-            V_bin[s_void] = 1#self["x_voids"][ii]
+            # V_bin[s_void] = 1
+            V_bin[s_void] += self["x_voids"][ii]
         
         # find patches on surface
         p3d = Grid(V_bin.shape, width = wd)
@@ -494,40 +536,6 @@ class Voids(dict):
         print(f"\tSTAT: 1/r value: {1/r_fac:.4g}")
         
         return p3d_sel, r_fac
-
-    def _void2mesh(self, void_id, tex_vals, edge_thresh):
-
-        void = self["x_voids"][void_id]
-        spt = self["cpts"][void_id]
-        # make watertight
-        void = np.pad(void, tuple([(2,2)]*3), mode = "constant", constant_values = 0)
-        
-        
-        if np.std(void) == 0:
-            return Surface(None, None, texture=None)
-            
-        # try skimage measure
-        verts, faces, _, __ = marching_cubes(void, 0.5)
-
-        verts -= 2 # correct for padding
-        for i3 in range(3):
-            verts[:,i3] += spt[i3] # z, y, x to x, y, z
-        
-        # if b > 1, scale up the size
-        verts *= (self.b)
-
-        # Decimate
-        if edge_thresh > 0:
-            verts, faces, info = pymesh.collapse_short_edges_raw(verts, faces, edge_thresh, preserve_feature = True)
-        
-        # set texture
-        texture = np.empty((len(verts),3), dtype = np.float32)
-        texture[:,0] = float(tex_vals[0])
-        texture[:,1] = float(tex_vals[1])
-        texture[:,2] = float(tex_vals[2])
-
-        return Surface(verts, faces, texture=texture)
-
 
     def _gray_to_rainbow(self, gray):
         '''
@@ -550,15 +558,12 @@ class Voids(dict):
             r = 0; g = 0; b = 255
         return r, g, b
     
-
-
-    def export_void_mesh_with_texture(self, texture_key, edge_thresh = 1.0):
+    def export_void_mesh_mproc(self, texture_key, edge_thresh = 1.0, preserve_feature = False, nprocs = None, pool_context = "fork"):
 
         '''export with texture, slower but vis with color coding
         '''
-        st_chkpt = cp.cuda.Event(); end_chkpt = cp.cuda.Event(); st_chkpt.record()    
-        
-
+        timer = TimerCPU("secs")
+        timer.tic()
         
         if texture_key == "sizes":
             tex_vals = np.empty((len(self),3))
@@ -585,77 +590,10 @@ class Voids(dict):
             tex_vals[:,1] = self["sizes"]
             tex_vals[:,2] = self["max_feret"]["norm_dia"] if "max_feret" in self.keys() else 0.0
 
-        # ORIGINAL
-        id_len = 0
-        verts = []
-        faces = []
-        texture = []
-        for iv in range(len(self)):
-            surf = self._void2mesh(iv, tex_vals[iv], edge_thresh = edge_thresh)
-            if not np.any(surf["faces"]):
-                continue
-            verts.append(surf["vertices"])
-            faces.append(np.array(surf["faces"]) + id_len)
-            texture.append(surf["texture"])
-            id_len = id_len + len(surf["vertices"])
-
-
-        # normalize colormap
-        texture = np.concatenate(texture, axis = 0)
-        for i3 in range(3):
-            color = texture[:,i3]
-            min_val = color.min()
-            max_val = color.max()
-            if max_val > min_val:
-                texture[:,i3] = 255*(color - min_val)/(max_val - min_val)
-            else:
-                texture[:,i3] = 255
-
-
-        surf = Surface(np.concatenate(verts, axis = 0), \
-                       np.concatenate(faces, axis = 0), \
-                       texture = texture.astype(np.uint8))
-        
-        end_chkpt.record(); end_chkpt.synchronize(); t_chkpt = cp.cuda.get_elapsed_time(st_chkpt,end_chkpt)
-        print(f"\tTIME: compute void mesh {t_chkpt/1000.0:.2f} secs")
-        return surf
-
-    def export_void_mesh_mproc(self, texture_key, edge_thresh = 1.0):
-
-        '''export with texture, slower but vis with color coding
-        '''
-        st_chkpt = cp.cuda.Event(); end_chkpt = cp.cuda.Event(); st_chkpt.record()    
-        
-        if texture_key == "sizes":
-            tex_vals = np.empty((len(self),3))
-            tex_vals[:,0] = np.log(self["sizes"]+1.0e-12) #255 #void_id
-            tex_vals[:,1] = 255
-            tex_vals[:,2] = 255
-            
-        elif "distance" in texture_key:
-            raise ValueError("not implemented")
-
-        elif "max_feret" in texture_key:
-            if "max_feret" not in self.keys():
-                self.calc_max_feret_dm()            
-            tex_vals = np.empty((len(self),3))
-            tex_vals[:,0] = self[texture_key]["norm_dia"].copy()
-            tex_vals[:,1] = self[texture_key]["theta"].copy()            
-            tex_vals[:,2] = self[texture_key]["phi"].copy()
-
-        elif "number_density" in texture_key:
-            if "number_density" not in self.keys():
-                raise ValueError("number density is not computed")
-            tex_vals = np.empty((len(self),3))
-            tex_vals[:,0] = self[texture_key]
-            tex_vals[:,1] = self["sizes"]
-            tex_vals[:,2] = self["max_feret"]["norm_dia"] if "max_feret" in self.keys() else 0.0
-
-        # ALTERNATIVE
         # remove empty voids (originating from those misclassified in coarse step)
-        surf = void2mesh_mproc(self["x_voids"], self["cpts"], tex_vals, edge_thresh, self.b)
-        end_chkpt.record(); end_chkpt.synchronize(); t_chkpt = cp.cuda.get_elapsed_time(st_chkpt,end_chkpt)
-        print(f"\tTIME: compute void mesh {t_chkpt/1000.0:.2f} secs")
+        surf = void2mesh_mproc(self["x_voids"], self["cpts"], tex_vals, edge_thresh, self.b, preserve_feature, nprocs, pool_context)
+        time = timer.toc(f"compute void mesh")
+        
         return surf
 
 
@@ -677,38 +615,11 @@ class Voids(dict):
         timer = TimerCPU("secs")
         timer.tic()
         arr = num_density(self["cents"], radius_val)
-        self['number_density'] = arr
+        self['number_density'] = np.asarray(arr)
         timer.toc("calculate number density")
         return
 
-def single_void2mesh(void, spt, tex_val, edge_thresh = 0.0, b = 1):
-
-    # make watertight
-    void = np.pad(void, tuple([(2,2)]*3), mode = "constant", constant_values = 0)
-        
-    # try skimage measure
-    verts, faces, _, __ = marching_cubes(void, 0.5)
-
-    verts -= 2 # correct for padding
-    for i3 in range(3):
-        verts[:,i3] += spt[i3] # z, y, x to x, y, z
-    
-    # if b > 1, scale up the size
-    verts *= b
-
-    # Decimate
-    if edge_thresh > 0:
-        verts, faces, info = pymesh.collapse_short_edges_raw(verts, faces, edge_thresh, preserve_feature = True)
-    
-    # set texture
-    texture = np.empty((len(verts),3), dtype = np.float32)
-    texture[:,0] = float(tex_val[0])
-    texture[:,1] = float(tex_val[1])
-    texture[:,2] = float(tex_val[2])
-
-    return verts, faces, texture
-
-def void2mesh_mproc(x_voids, cpts, tex_vals, edge_thresh, b):
+def void2mesh_mproc(x_voids, cpts, tex_vals, edge_thresh, b, preserve_feature, nprocs, pool_context):
 
     # remove void sub-volumes which are empty (these originate from the coarse map where the subset reconstruction reveals there was no void in this bounding box)
     idxs = np.arange(len(x_voids))
@@ -719,11 +630,17 @@ def void2mesh_mproc(x_voids, cpts, tex_vals, edge_thresh, b):
     tex_vals = tex_vals[idxs]
     
     # multiprocess marching cubes and mesh reduction
-    func = functools.partial(single_void2mesh, edge_thresh = edge_thresh, b = b)
-    pool = Pool(processes = cpu_count())
-    outlist = pool.starmap(func, list(zip(x_voids, cpts, tex_vals)))
-    pool.close()
-    pool.join()
+    func = functools.partial(single_void2mesh, edge_thresh = edge_thresh, b = b, preserve_feature = preserve_feature)
+    print(f"void2mesh_mproc: preserve_feature : {preserve_feature}, edge_thres : {edge_thresh}, b : {b}, nprocs : {nprocs}")
+    if nprocs is None:
+        nprocs = cpu_count()
+    
+    from multiprocessing import get_context
+    with get_context(pool_context).Pool(processes = nprocs) as pool:
+    # pool = Pool(processes = nprocs)
+        outlist = pool.starmap(func, list(zip(x_voids, cpts, tex_vals)))
+        pool.close()
+        pool.join()
     
     # merge individual void mesh objects
     verts = []
@@ -756,6 +673,33 @@ def void2mesh_mproc(x_voids, cpts, tex_vals, edge_thresh, b):
     
     return surf
 
+def single_void2mesh(void, spt, tex_val, edge_thresh = 0.0, b = 1, preserve_feature = False):
+
+    
+    # make watertight
+    void = np.pad(void, tuple([(2,2)]*3), mode = "constant", constant_values = 0)
+        
+    # try skimage measure
+    verts, faces, _, __ = marching_cubes(void, 0.5)
+
+    verts -= 2 # correct for padding
+    for i3 in range(3):
+        verts[:,i3] += spt[i3] # z, y, x to x, y, z
+    
+    # if b > 1, scale up the size
+    verts *= b
+
+    # Decimate
+    if edge_thresh > 0:
+        verts, faces, info = pymesh.collapse_short_edges_raw(verts, faces, edge_thresh, preserve_feature = preserve_feature)
+    
+    # set texture
+    texture = np.empty((len(verts),3), dtype = np.float32)
+    texture[:,0] = float(tex_val[0])
+    texture[:,1] = float(tex_val[1])
+    texture[:,2] = float(tex_val[2])
+
+    return verts, faces, texture
 
 
 
@@ -778,8 +722,7 @@ class VoidLayers(Voids):
         self["surfaces"] = []
         self.vol_shape = (1,1,1)
         self.b = 1
-        self.pad_bb = 1
-        self.marching_cubes_algo = "skimage"#"vedo"
+        
         return
         
 

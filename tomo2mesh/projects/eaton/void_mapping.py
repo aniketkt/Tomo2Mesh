@@ -52,7 +52,7 @@ def void_map_gpu(projs, theta, center, dark, flat, b, pixel_size):
     return voids_b
 
 
-def void_map_all(projs, theta, center, dark, flat, b, pixel_size, z_crop = (None,None)):
+def void_map_all(projs, theta, center, dark, flat, b, pixel_size, dust_thresh, z_crop = (None,None)):
     timer = TimerCPU("secs")
     
     # tmp_path = '/data01/Eaton_Polymer_AM/reconstructed/tmp_rec'
@@ -73,7 +73,7 @@ def void_map_all(projs, theta, center, dark, flat, b, pixel_size, z_crop = (None
 
     #FBP
     t_gpu.tic()
-    V = recon_all(projs, theta, center, 32, dark, flat, pixel_size) 
+    V = recon_all(projs, theta, center, 32, dark, flat, pixel_size*b, outlier_removal = True if b == 1 else False) 
     V_rec = V #[:(nz//28)*28,:(n//28)*28,:(n//28)*28] 
 
     t_rec = t_gpu.toc('RECONSTRUCTION')
@@ -99,43 +99,39 @@ def void_map_all(projs, theta, center, dark, flat, b, pixel_size, z_crop = (None
     timer.toc("Fill patches")
 
     # Connected components
-    cylindrical_mask(V_seg, 1, mask_val = 0)
-    V_seg = cc3d.connected_components(V_seg)
+    if b==1:
+        cylindrical_mask(V_seg, 1, mask_val = 0)
+        V_seg = cc3d.connected_components(V_seg)
 
-    # Porosity without dust removal
-    porosity = (np.sum((V_seg>0).astype(np.uint8)))/(np.prod(V_seg.shape)*np.pi/4)
-    print("Porosity before dust removal:", porosity)
+        # Porosity without dust removal
+        porosity = (np.sum((V_seg>0).astype(np.uint8)))/(np.prod(V_seg.shape)*np.pi/4)
+        print("Porosity before dust removal:", porosity)
 
-    timer.tic()
-    voids_b = Voids().count_voids(V_seg, b, 2)
+        timer.tic()
+        voids_b = Voids().count_voids(V_seg, b, dust_thresh)
+        
+        # Porosity calculation with dust removal
+        # try 1
+        porosity = np.sum(voids_b["sizes"])/(np.prod(voids_b.vol_shape)*np.pi/4)
+        print("Porosity after dust removal: ", porosity)
+        voids_b["porosity"] = porosity
+
+        #try 2
+        V_bin = np.zeros(voids_b.vol_shape, dtype = np.uint8)
+        for ii, s_void in enumerate(voids_b["s_voids"]):
+            # V_bin[s_void] = 1
+            V_bin[s_void] +=voids_b["x_voids"][ii]
+        voids_b["porosity_z"] = np.sum(V_bin, axis=(1,2))/(np.prod(voids_b.vol_shape[1:])*np.pi/4)
     
-    # Porosity calculation with dust removal
-    # try 1
-    porosity = np.sum(voids_b["sizes"])/(np.prod(voids_b.vol_shape)*np.pi/4)
-    print("Porosity after dust removal: ", porosity)
-    voids_b["porosity"] = porosity
 
-    # # try 2
-    # counter = 0
-    # for void in voids_b["x_voids"]:
-    #     counter += np.sum(void)
-    # porosity = counter/(np.prod(voids_b.vol_shape)*np.pi/4)
-    # print("Porosity try2: ", porosity)
+    if b!=1:
+        cylindrical_mask(V_seg, 1, mask_val = 1)
+        V_seg = cc3d.connected_components(V_seg)
+        voids_b = Voids().count_voids(V_seg, b, dust_thresh)
+        voids_b["porosity"] = 0
+        voids_b["porosity_z"] = 0
 
-    # # try 3
-    # V_seg = np.zeros(voids_b.vol_shape, dtype=np.uint8)
-    # for iv, s_void in enumerate(voids_b["s_voids"]):
-    #     V_seg[s_void] = voids_b["x_voids"][iv].copy()
-    # print(V_seg.shape)
-    # porosity = (np.sum(V_seg))/(np.prod(V_seg.shape)*np.pi/4)
-    # print("Porosity try3: ", porosity)
 
-    # from tomo2mesh import viewer
-    # viewer.view_midplanes(vol = V_seg)
-    # plt.savefig('/data01/tmp.png')
-    # plt.close()
-
-    
     # blow up volume enclosing voids back to full size before cropping
     voids_b.vol_shape = V_rec.shape
     voids_b.transform_linear_shift([z_crop[0]//b,0,0])

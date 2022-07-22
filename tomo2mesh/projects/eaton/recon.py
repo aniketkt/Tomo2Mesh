@@ -8,13 +8,14 @@ from tomo2mesh.projects.eaton.params import *
 import numexpr as ne
 
 
-def preprocess(data, dark, flat, pixel_size, apply_pg = True):
+def preprocess(data, dark, flat, pixel_size, apply_pg = True, outlier_removal = False):
     
     data[:] = (data-dark)/(cp.maximum(flat-dark, 1.0e-6))                
     
-    fdata = ndimage.median_filter(data,[3,3,3])
-    ids = cp.where(cp.abs(fdata-data)>0.5*cp.abs(fdata))
-    data[ids] = fdata[ids]        
+    if outlier_removal:
+        fdata = ndimage.median_filter(data,[3,3,3])
+        ids = cp.where(cp.abs(fdata-data)>0.5*cp.abs(fdata))
+        data[ids] = fdata[ids]        
     
     if apply_pg:
         data[:] = paganin_filter(data, alpha = pg_alpha, energy = energy, pixel_size = pixel_size, dist = detector_dist)
@@ -59,7 +60,7 @@ def recon_slice(projs, theta, center, dark, flat, sino_pos, pixel_size, pg_pad =
     return obj_gpu.get()[pg_pad,...]
 
 import tqdm
-def recon_all(projs, theta, center, nc, dark, flat, pixel_size):
+def recon_all(projs, theta, center, nc, dark, flat, pixel_size, outlier_removal = False):
 
     stream = cp.cuda.Stream()
     with stream:
@@ -86,7 +87,7 @@ def recon_all(projs, theta, center, nc, dark, flat, pixel_size):
         # dark-flat correction, phase retrieval
         stream = cp.cuda.Stream()
         with stream:
-            preprocess(data, dark[s_chunk], flat[s_chunk], pixel_size*1.0e-4)
+            preprocess(data, dark[s_chunk], flat[s_chunk], pixel_size*1.0e-4, outlier_removal = outlier_removal)
             fbp_filter(data)
             rec_all(obj_gpu, data, theta, center)
             obj_gpu[:] = ndimage.gaussian_filter(obj_gpu, 0.5)

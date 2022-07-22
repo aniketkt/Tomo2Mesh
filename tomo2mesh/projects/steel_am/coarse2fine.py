@@ -22,7 +22,6 @@ def coarse_map(projs, theta, center, b, b_K, dust_thresh):
 
     # fbp
     t_gpu.tic()
-
     raw_data = projs[::b,::b_K,::b], theta[::b_K,...], center/b
     # V = cp.empty((nz,n,n), dtype = cp.float32)
     V = recon_all_gpu(*raw_data)
@@ -41,7 +40,7 @@ def coarse_map(projs, theta, center, b, b_K, dust_thresh):
     V = cp.array(V, dtype = cp.uint32)
     V[:], n_det = ndimage.label(V,structure = cp.ones((3,3,3),dtype=cp.uint8))    
     
-    voids_b = Voids(pad_bb = 2).count_voids(V.get(), b, dust_thresh)    
+    voids_b = Voids().count_voids(V.get(), b, dust_thresh, pad_bb = 2)    
     t_label = t_gpu.toc('LABELING')
     
     voids_b["rec_min_max"] = rec_min_max

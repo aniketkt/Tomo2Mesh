@@ -61,12 +61,15 @@ if __name__ == "__main__":
     if vol_name == "2k":
         n_iter = 5
         projs, theta, center = read_raw_data_b2()
+
+
     elif vol_name == "4k":
+        print("Use smartvis.py for 4k. exiting...")
+        exit()
         n_iter = 3
         projs, theta, center = read_raw_data_b1()
 
-
-
+    # n_iter = 1
 
     # read data and initialize output arrays
     print("BEGIN: Read projection data from disk")
@@ -80,7 +83,7 @@ if __name__ == "__main__":
     t_rec_coarse = []
     t_label_coarse = []
     for ib in range(n_iter):
-        voids_b = coarse_map(projs, theta, center, b, b_K, 2)
+        voids_b = coarse_map(projs, theta, center, b, b_K, 0)
         t_gpu.tic()
         
         p_voids, r_fac = voids_b.export_grid(wd)    
@@ -89,7 +92,6 @@ if __name__ == "__main__":
         t_label_coarse.append(voids_b.compute_time["labeling"] + t_export)
         cp._default_memory_pool.free_all_blocks()   
         cp.fft.config.get_plan_cache().clear()
-
 
     t_rec_subset = []
     for ib in range(n_iter):
@@ -107,16 +109,28 @@ if __name__ == "__main__":
         voids = Voids().import_from_grid(voids_b, x_voids, p_voids)
         t_label_subset.append(t_gpu.toc("subset relabeling"))
 
+    
+    if n_iter == 1:
+        voids_b.write_to_disk(os.path.join(voids_dir,f"c2f_{vol_name}_b_{b}"))
+        voids.write_to_disk(os.path.join(voids_dir,f"c2f_{vol_name}_b_{b}_subset"))
+        sys.exit()
+
+    # save voids with size greater than 3 pixels across
+    idxs = np.where(voids["sizes"] > 3**3)[0]
+    voids.select_by_indices(idxs)
+    voids_b.select_by_indices(idxs)
+    
     print("this are the time measurements")
     df["reconstruct-coarse"] = t_rec_coarse
     df["label-coarse"] = t_label_coarse
     df["reconstruct-subset"] = t_rec_subset
     df["label-subset"] = t_label_subset
     df["sparsity"] = [1/r_fac]*n_iter
-    df["voids"] = [voids_b.n_voids]*n_iter
+    df["voids"] = [len(voids)]*n_iter
     df["b"] = [b]*n_iter
     df["r_fac_z"] = [len(z_pts)/(p_voids.vol_shape[0]//wd)]*n_iter
     print(df)
+    
     df.to_csv(os.path.join(time_logs, f"coarse2fine_{vol_name}_{b}.csv"), index = False, mode = 'w')
     
     
