@@ -108,7 +108,6 @@ if __name__ == "__main__":
             voids.select_by_indices(idxs)
             voids_b.select_by_indices(idxs)
 
-
             t_mapping = timer.toc(f"CRITERIA: {criteria}")
 
             # MESHING        
