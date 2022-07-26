@@ -105,8 +105,7 @@ def crack_orientation(voids, cutoff = 3.0):
 
 
 
-def merge_void_layers(sample_tag, b, raw_pixel_size, number_density_radius = 50):
-    dust_thresh = 2
+def merge_void_layers(sample_tag, b, raw_pixel_size, dust_thresh, number_density_radius = 50):
     z_max = []
 
     rdf = pd.read_csv(save_path)
@@ -142,9 +141,9 @@ def merge_void_layers(sample_tag, b, raw_pixel_size, number_density_radius = 50)
         if scan_tag != scan_num[-1]:
             # print(f"z_max: {z_max}")
             voids.select_by_z_coordinate(z_max[ii]) #Find voids in each layer (w/o overlap)
-            #porosity_z_all.append(voids["porosity_z"][0:z_max[ii]])
-        #else:
-            #porosity_z_all.append(voids["porosity_z"])
+        #     porosity_z_all.append(voids["porosity_z"][0:z_max[ii]])
+        # else:
+        #     porosity_z_all.append(voids["porosity_z"])
             
         voids_all.add_layer(voids,y_pos_list[ii])
         print("added a layer")
@@ -168,7 +167,7 @@ def merge_void_layers(sample_tag, b, raw_pixel_size, number_density_radius = 50)
 
     # porosity_z_all = np.concatenate(porosity_z_all, axis = 0)
     # voids_all["porosity_z"] = porosity_z_all
-    # #Save local porosity values for all layers in sample 1
+    #Save local porosity values for all layers in sample 1
     # if b == 1:
     #     fpath = "/data01/Eaton_Polymer_AM/csv_files/local_porosity_vals.csv"
     #     info = {"porosity_z": porosity_z_all}
@@ -187,7 +186,7 @@ if __name__ == "__main__":
     b = 4
     dust_thresh = 2
     number_density_mesh = False
-    feret_dm_mesh = True
+    feret_dm_mesh = False
 
     sample_name = str(sys.argv[1])
     
@@ -197,7 +196,7 @@ if __name__ == "__main__":
     rdf = pd.read_csv(save_path)
     number_density_radius = 50
     
-    voids_all = merge_void_layers(sample_name, b, pixel_size)
+    voids_all = merge_void_layers(sample_name, b, pixel_size, dust_thresh)
     if b != 1:
         #voids_all.export_void_mesh_with_texture("number_density").write_ply(f'/data01/Eaton_Polymer_AM/ply_files/sample_{sample_name}.ply')
         if number_density_mesh:
@@ -206,7 +205,7 @@ if __name__ == "__main__":
             voids_all.select_by_feret_dia_norm(3.0)
             voids_all.export_void_mesh_mproc("max_feret", edge_thresh=1.0).write_ply(f'/data01/Eaton_Polymer_AM/ply_files/sample_{sample_name}_maxferet.ply')
         
-    voids_all.write_to_disk(f'/data01/Eaton_Polymer_AM/voids_data/sample_{sample_name}_all_layers_b{b}')
+    voids_all.write_to_disk(f'/data01/Eaton_Polymer_AM/voids_data/sample_{sample_name}_all_layers_dust{dust_thresh}_b{b}')
 
     exit()
 

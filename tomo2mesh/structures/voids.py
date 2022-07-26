@@ -113,7 +113,16 @@ class Voids(dict):
 
 
     def __len__(self):
-        return len(self["x_voids"])
+        return len(self["sizes"])
+
+    # def write_max_feret_data(self, fpath):
+
+    #     columns = ["this", "that"]
+    #     rows = np.concatenate([self["max_feret"]["norm_dia"], self["max_feret"]["phi"], self["max_feret"]["theta"]], axis = 1)
+    #     df = pd.DataFrame(columns = columns, data = rows)
+    #     df.to_csv(fpath.split('.')[0] + '.csv', index = False)
+    #     return
+
 
     def write_size_data(self, fpath):
         
@@ -222,6 +231,38 @@ class Voids(dict):
         self["x_voids"] = []
         for f_ in flist:
             self["x_voids"].append(imread(f_))
+
+        return self
+
+
+    def load_measurements_only(self, fpath):
+
+        import glob
+        assert os.path.exists(fpath), "path not found to import voids data from"
+        with h5py.File(os.path.join(fpath, "meta.hdf5"), 'r') as hf:
+            self.vol_shape = tuple(np.asarray(hf["vol_shape"]))
+            self.b = int(np.asarray(hf["b"]))
+            self["sizes"] = np.asarray(hf["sizes"][:])
+            self["cents"] = np.asarray(hf["cents"][:])
+            self["cpts"] = np.asarray(hf["cpts"][:])
+
+            self["s_voids"] = []
+            for s_void in np.asarray(hf["s_voids"]):
+                self["s_voids"].append((slice(s_void[0], s_void[1]), slice(s_void[2], s_void[3]), slice(s_void[4], s_void[5])))
+
+            if "max_feret" in hf.keys():
+                self["max_feret"] = {}
+                self["max_feret"]["dia"] = np.asarray(hf["max_feret/dia"])
+                self["max_feret"]["eq_sph"] = np.asarray(hf["max_feret/eq_sph"])
+                self["max_feret"]["norm_dia"] = np.asarray(hf["max_feret/norm_dia"])
+                self["max_feret"]["theta"] = np.asarray(hf["max_feret/theta"])
+                self["max_feret"]["phi"] = np.asarray(hf["max_feret/phi"])
+
+            if "number_density" in hf.keys():
+                self['number_density'] = np.asarray(hf["number_density"])
+
+            self["x_voids"] = None
+            self["x_boundary"] = None
 
         return self
 
