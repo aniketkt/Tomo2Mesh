@@ -8,7 +8,7 @@ import os
 from tomo2mesh.projects.eaton.params import save_path, data_path, voids_path
 # rdf = pd.read_csv(save_path)
 
-def get_filename(sample_tag, scan_tag, csv_path = save_path):
+def get_filename(sample_tag, scan_tag):
     '''
     The function reads individual projection data in the form of h5 files given the sample number, layer number (or field of view),
     and the path where csv data file is. Produces the h5 file name . 
@@ -23,9 +23,11 @@ def get_filename(sample_tag, scan_tag, csv_path = save_path):
     
     return fname
     '''
+    if "TCRP3" in sample_tag:
+        fname = f'{sample_tag}_{int(scan_tag):03d}.h5'
+    else:
+        fname = "PE6_"+str(sample_tag)+"_"+"0"*((len(str(scan_tag))-3)*-1)+str(scan_tag)+".h5"
 
-    fname = "PE6_"+str(sample_tag)+"_"+"0"*((len(str(scan_tag))-3)*-1)+str(scan_tag)+".h5"
-    
     return fname
 
 
@@ -57,16 +59,39 @@ def read_raw_data_1X(sample_tag, scan_tag, csv_path = save_path):
     rot_cen = info["rot_cen"]
 
     #Create file name
-    fname = "PE6_"+str(sample_tag)+"_"+"0"*((len(str(scan_tag))-3)*-1)+str(scan_tag)+".h5"
+    fname = get_filename(sample_tag, scan_tag)#"PE6_"+str(sample_tag)+"_"+"0"*((len(str(scan_tag))-3)*-1)+str(scan_tag)+".h5"
     f = h5py.File(os.path.join(data_path, fname), 'r')
     projs = np.asarray(f['exchange/data'][:])
     theta = np.radians(np.asarray(f['exchange/theta'][:]))%(2*np.pi)
     dark = np.mean(f['exchange/data_dark'][:], axis = 0)
     flat = np.mean(f['exchange/data_white'][:], axis = 0)
+
+    if len(theta) == 2999: # FIX: some issue with fbp filter giving OOM when ntheta = 2999
+        theta = np.concatenate([theta, theta[-1:]], axis = 0)
+        projs = np.concatenate([projs, projs[-1:]], axis = 0)
+
     f.close()
     center = rot_cen
 
     return projs, theta, center, dark, flat
+
+
+def read_raw_data_any(fpath):
+    '''
+    
+    return projs, theta, center, dark, flat
+    '''
+
+    #Create file name
+    f = h5py.File(fpath, 'r')
+    projs = np.asarray(f['exchange/data'][:])
+    theta = np.radians(np.asarray(f['exchange/theta'][:]))%(2*np.pi)
+    dark = np.mean(f['exchange/data_dark'][:], axis = 0)
+    flat = np.mean(f['exchange/data_white'][:], axis = 0)
+    f.close()
+
+    return projs, theta, projs.shape[-1]/2.0, dark, flat
+
 
 def adj_csv_file(sample_tag_list, scan_tag_list, csv_path = save_path):
     '''

@@ -152,17 +152,17 @@ def merge_void_layers(sample_tag, b, raw_pixel_size, dust_thresh, number_density
         #     break
 
         #Save porosity values for all layers in all samples
-        # if b == 1:
-        #     if str(sample_tag)=="1" and str(scan_tag)=="124":
-        #         fpath = "/data01/Eaton_Polymer_AM/csv_files/porosity_vals_adj2.csv"
-        #         info = {"sample_tag": [sample_tag], "scan_tag": [scan_tag], "porosity": [voids["porosity"]]}
-        #         df2 = pd.DataFrame(info)
-        #         df2.to_csv(fpath)
-        #     else:
-        #         fpath = "/data01/Eaton_Polymer_AM/csv_files/porosity_vals_adj2.csv"
-        #         info = {"sample_tag": [sample_tag], "scan_tag": [scan_tag], "porosity": [voids["porosity"]]}
-        #         df2 = pd.DataFrame(info)
-        #         df2.to_csv(fpath, mode = 'a',header=False)
+        if b == 1:
+            if str(sample_tag)=="1" and str(scan_tag)=="124":
+                fpath = "/data01/Eaton_Polymer_AM/csv_files/porosity_vals_adj2.csv"
+                info = {"sample_tag": [sample_tag], "scan_tag": [scan_tag], "porosity": [voids["porosity"]]}
+                df2 = pd.DataFrame(info)
+                df2.to_csv(fpath)
+            else:
+                fpath = "/data01/Eaton_Polymer_AM/csv_files/porosity_vals_adj2.csv"
+                info = {"sample_tag": [sample_tag], "scan_tag": [scan_tag], "porosity": [voids["porosity"]]}
+                df2 = pd.DataFrame(info)
+                df2.to_csv(fpath, mode = 'a',header=False)
 
 
     # porosity_z_all = np.concatenate(porosity_z_all, axis = 0)
@@ -183,7 +183,7 @@ def merge_void_layers(sample_tag, b, raw_pixel_size, dust_thresh, number_density
 
 if __name__ == "__main__":
 
-    b = 4
+    b = 1
     dust_thresh = 2
     number_density_mesh = False
     feret_dm_mesh = False

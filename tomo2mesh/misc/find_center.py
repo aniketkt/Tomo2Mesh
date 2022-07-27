@@ -26,8 +26,6 @@ import cupy as cp
 plots_dir = '/home/yash/eaton_plots2/'
 if not os.path.exists(plots_dir):
     os.makedirs(plots_dir)
-import matplotlib as mpl
-mpl.use('Agg')
 
 def preprocess(data, dark, flat):
 
@@ -109,6 +107,9 @@ def estimate_center(projs, search_range, roi_width = 0.8, metric = "NCC", procs 
     
 
 def main(args):
+
+    import matplotlib as mpl
+    mpl.use('Agg')
 
     projs = read_opposing_pairs(args.input_fname)
 
