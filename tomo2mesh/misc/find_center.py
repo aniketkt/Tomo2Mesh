@@ -15,17 +15,12 @@ import matplotlib.pyplot as plt
 
 from skimage.feature import match_template
 from tomo2mesh.misc.img_stats import Parallelize
-from tomo2mesh.projects.eaton.rw_utils_ae import read_raw_data_1X, save_path
-from tomo2mesh.projects.eaton.recon import recon_slice, recon_binned
 from tomo2mesh.misc import viewer
 from tomo2mesh.misc.voxel_processing import cylindrical_mask, modified_autocontrast
 import h5py
 from cupyx.scipy.ndimage import median_filter
 import cupy as cp
 
-plots_dir = '/home/yash/eaton_plots2/'
-if not os.path.exists(plots_dir):
-    os.makedirs(plots_dir)
 
 def preprocess(data, dark, flat):
 
@@ -131,22 +126,6 @@ def main(args):
     timer.toc("finding center")
     print("%s center = %.2f"%(args.input_fname, center_val))
 
-    #Save center in csv file
-    df = pd.read_csv(save_path)
-    df.loc[(df["sample_num"] == args.sample_num) & (df["scan_num"] == int(args.scan_num)),"rot_cen"] = center_val
-    df.to_csv(save_path,index = False)
-
-    #Save reconstructed slice as a check
-    projs, theta, center_guess, dark, flat = read_raw_data_1X(str(args.sample_num), str(args.scan_num))
-    V = recon_binned(projs, theta, center_val, dark, flat, 4, 3.13).get()
-    h = modified_autocontrast(V)
-    V = np.clip(V, *h)
-    cylindrical_mask(V, 1.0, mask_val = V.min())
-    imgs = viewer.get_orthoplanes(vol = V)
-    fig, ax = plt.subplots(1,1, figsize = (12,12))
-    ax.imshow(imgs[0], cmap = 'gray')
-    plt.savefig(plots_dir + f'check_recon_sample{args.sample_num}_scan{args.scan_num}.png', format='png')
-    plt.close()
     
     return
 
@@ -166,8 +145,6 @@ if __name__ == "__main__":
     parser.add_argument('-roi_height_end', required = False, type = float, default = 1.0, help = "fraction of vertical roi end val to use for cross correlation match")
     parser.add_argument('--metric', required = False, type = str, default = "NCC", help = "metric can be MSE or NCC. NCC is preferrred")
     parser.add_argument('--procs', required = False, type = int, default = 12, help = "number of processes to spawn for multiprocessing")
-    parser.add_argument('--sample_num', required = True, type = str, help = "Sample number") #
-    parser.add_argument('--scan_num', required = True, type = str, help = "Scan number") #
 
     args = parser.parse_args()
 

@@ -95,6 +95,42 @@ def edge_plot(img, seg_img, ax, color = [0,255,0]):
     
     return ax
 
+
+def edge_plot_multiple(img, seg_imgs, ax, colors = [[0,255,0],[0,0,255], [255,0,0]]):
+    """
+    Show edge-map of segmented map overlain on greyscale image.  
+    
+    :param numpy.array img: grayscale image of any shape (Y,X)  
+    
+    :param numpy.array seg_img: corresponding segmented image  
+    
+    :param matplotlib.axes ax: One axis object to plot into  
+    
+    :param list color: list of the 3 RGB values
+    
+    """
+    
+    img = (255*((img - img.min()) / (img.max() - img.min()))).astype(np.uint8)
+    img = np.concatenate([img[...,np.newaxis]]*3, axis = -1)
+#     sob_img = IP.calc_sobel(np.copy(seg_img))[0]
+    for ip, seg_img in enumerate(seg_imgs):
+        sob_img = sobel(np.copy(seg_img))
+        sob_img = (sob_img - sob_img.min()) / (sob_img.max() - sob_img.min())
+        sob_img = (255*np.round(sob_img)).astype(np.uint8)
+        img[sob_img == 255] = colors[ip]
+
+    ax.imshow(img)
+    
+    return ax
+
+
+
+
+
+
+
+
+
 def seg_plot(img, seg_img, ax, alpha = 0.3, cmap = 'gray'):
 
     """

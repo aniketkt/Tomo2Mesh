@@ -46,8 +46,7 @@ def max_ellip_rad(x_void):
         P = np.asarray(np.where(x_void_adj[::4,::4,::4])).T 
         P = np.array(P)*4
 
-        
-        
+
     #Calculate the center location, radii, and orientation matrix of the fitted ellipsoid
     tolerance = 0.01
     (N, d) = np.shape(P)
@@ -89,13 +88,14 @@ def max_ellip_rad(x_void):
     rad = radii
 
     #Calculate the ellipticity of the ellipsoid
-    # a,b,c = sorted(rad, reverse=True)
-    # elp_E = np.sqrt((a**2-b**2)/a**2) #Equatorial ellipticity of tri-axial ellipsoid
-    # elp_P = np.sqrt((a**2-c**2)/a**2) #Polar ellipticity of tri-axial ellipsoid
-    # ellipticity_E = elp_E
-    # ellipticity_P = elp_P
+    a,b,c = sorted(rad, reverse=True)
+    elp_E = np.sqrt((a**2-b**2)/a**2) #Equatorial ellipticity of tri-axial ellipsoid
+    elp_P = np.sqrt((a**2-c**2)/a**2) #Polar ellipticity of tri-axial ellipsoid
+    ellipticity_E = elp_E
+    ellipticity_P = elp_P
 
-    return max(rad)/max(min(rad), 1.0)
+    return ellipticity_E, ellipticity_P #max(rad)/max(min(rad), 1.0)
+
 
 def get_all_max_ellip_rad(x_voids):
     p = Pool(processes = 36)

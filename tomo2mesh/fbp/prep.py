@@ -56,7 +56,7 @@ def fbp_filter(data):
     
     return t_gpu
 
-def preprocess(data, dark, flat):
+def preprocess(data, dark, flat, outlier_kernel = 1):
 
     '''
     Parameters
@@ -68,7 +68,8 @@ def preprocess(data, dark, flat):
     
     data = (data-dark)/(cp.maximum(flat-dark, 1.0e-6))                
     
-    fdata = ndimage.median_filter(data,[1,1,1])
+    o = outlier_kernel
+    fdata = ndimage.median_filter(data,[o,o,o])
     ids = cp.where(cp.abs(fdata-data)>0.5*cp.abs(fdata))
     data[ids] = fdata[ids]        
     

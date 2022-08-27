@@ -157,7 +157,7 @@ def recon_all_gpu(projs, theta, center, dark_flat = None, sinogram_order = True)
 
 def recon_patches_3d(projs, theta, center, p3d, TIMEIT = False, \
                      segmenter = None, segmenter_batch_size = 256, \
-                     dark_flat = None, rec_min_max = None, sinogram_order = True):
+                     dark_flat = None, rec_min_max = None, sinogram_order = True, outlier_kernel = 3, preblur = True):
 
     '''
     Parameters
@@ -221,7 +221,7 @@ def recon_patches_3d(projs, theta, center, p3d, TIMEIT = False, \
             if dark_flat is not None:
                 dark = cp.array(np.float32(dark_flat[0][z_pt:z_pt+nc,...]), dtype = cp.float32)
                 flat = cp.array(np.float32(dark_flat[1][z_pt:z_pt+nc,...]), dtype = cp.float32)
-                data[:] = preprocess(data.swapaxes(0,1), dark, flat).swapaxes(0,1)
+                data[:] = preprocess(data.swapaxes(0,1), dark, flat, outlier_kernel=outlier_kernel).swapaxes(0,1)
         stream.synchronize()
 
         # FBP FILTER
@@ -247,7 +247,7 @@ def recon_patches_3d(projs, theta, center, p3d, TIMEIT = False, \
         # EXTRACT PATCHES AND SEND TO CPU
         if segmenter is not None:
             # do segmentation
-            xchunk = extract_segmented(obj_mask, cpts, p3d.wd, segmenter, segmenter_batch_size, rec_min_max)
+            xchunk = extract_segmented(obj_mask, cpts, p3d.wd, segmenter, segmenter_batch_size, rec_min_max, preblur)
             # xchunk = extract_segmented_cpu(obj_mask, cpts, p3d.wd, segmenter, segmenter_batch_size, rec_min_max)
             times.append([ntheta, nc, n, t_cpu2gpu, t_filt, t_mask, t_bp])
             pass
@@ -295,7 +295,7 @@ def extract_from_mask(obj_mask, cpts, wd):
     
     return sub_vols, t_gpu2cpu
 
-def extract_segmented(obj_mask, cpts, wd, segmenter, batch_size, rec_min_max):
+def extract_segmented(obj_mask, cpts, wd, segmenter, batch_size, rec_min_max, preblur):
     
     ''' this is a chunk of reconstructed data along some z-chunk size (typically 32 or 64).
     wd is 32 (patch width).
@@ -335,7 +335,8 @@ def extract_segmented(obj_mask, cpts, wd, segmenter, batch_size, rec_min_max):
                 yp[:] = (yp - min_val) / (max_val - min_val)
 
                 # GAUSSIAN FILTER
-                yp[:] = gaussian_filter_cp(yp, 0.5)
+                if preblur:
+                    yp[:] = gaussian_filter_cp(yp, 0.5)
 
                 # use DLPack here as yp is cupy array                
                 cap = yp.toDlpack()

@@ -5,10 +5,11 @@ import pandas as pd
 import json
 import os
 
-from tomo2mesh.projects.eaton.params import save_path, data_path, voids_path
-# rdf = pd.read_csv(save_path)
 
-def get_filename(sample_tag, layer_tag, csv_path = save_path):
+data_path = '/data01/Eaton_Polymer_AM/raw_data/'
+
+
+def get_filename(sample_tag, layer_tag):
     '''
     The function reads individual projection data in the form of h5 files given the sample number, layer number (or field of view),
     and the path where csv data file is. Produces the h5 file name . 
@@ -23,8 +24,8 @@ def get_filename(sample_tag, layer_tag, csv_path = save_path):
     
     return fname
     '''
-
-    rdf = pd.read_csv(csv_path)
+    
+    rdf = pd.read_csv("/data01/Eaton_Polymer_AM/csv_files/data_map_1X.csv")
     info = rdf[(rdf["sample_num"] == int(sample_tag)) & (rdf["layer"] == int(layer_tag))].iloc[0]
 
     scan_num = int(info["scan_num"])
@@ -40,7 +41,38 @@ def get_filename(sample_tag, layer_tag, csv_path = save_path):
     return fname
 
 
-def read_raw_data_1X(sample_tag, layer_tag, csv_path = save_path):
+def read_raw_data_tss(fname):
+
+    parent_name = os.path.split(fname)[-1]
+    parent_path = os.path.split(fname)[0]
+    
+    f = h5py.File(fname, 'r')
+    projs = np.asarray(f['exchange/data'][:])
+    theta = np.radians(np.asarray(f['exchange/theta'][:]))#%(2*np.pi)
+    f.close()
+    f = h5py.File(os.path.join(parent_path, 'dark_fields_'+parent_name), 'r')
+    dark = np.mean(f['exchange/data_dark'][:], axis = 0)
+    f.close()
+    f = h5py.File(os.path.join(parent_path,'flat_fields_'+parent_name), 'r')
+    flat = np.mean(f['exchange/data_white'][:], axis = 0)
+    f.close()
+    return projs, theta, dark, flat
+
+def read_motor_positions(fname):
+
+    f = h5py.File(os.path.join(data_path,fname),'r')
+    
+    pos = {}
+    pos["rotary"] = float(f['measurement/instrument/sample_motor_stack/setup']["sample_rotary"][:])
+    pos["sample_x"] = float(f['measurement/instrument/sample_motor_stack/setup']["sample_x"][:])
+    pos["x_cent"] = float(f['measurement/instrument/sample_motor_stack/setup']["sample_x_cent"][:])
+    pos["sample_y"] = float(f['measurement/instrument/sample_motor_stack/setup']["sample_y"][:])
+    pos["sample_z_cent"] = float(f['measurement/instrument/sample_motor_stack/setup']["sample_z_cent"][:])
+    f.close()
+    return pos
+
+
+def read_raw_data_1X(sample_tag, layer_tag):
     '''
     The function reads individual projection data in the form of h5 files given the sample number, layer number (or field of view),
     and the path where csv data file is. Produces the projection data, dark-field data, flat-field data, rotation center
@@ -62,7 +94,7 @@ def read_raw_data_1X(sample_tag, layer_tag, csv_path = save_path):
     '''
 
     #Read data from csv file
-    rdf = pd.read_csv(csv_path)
+    rdf = pd.read_csv("/data01/Eaton_Polymer_AM/csv_files/data_map_1X.csv")
     info = rdf[(rdf["sample_num"] == int(sample_tag)) & (rdf["layer"] == int(layer_tag))].iloc[0]
 
     scan_num = int(info["scan_num"])
@@ -73,7 +105,8 @@ def read_raw_data_1X(sample_tag, layer_tag, csv_path = save_path):
 
     #Create file name
     if flag==0:
-        fname = "PE6_"+str(samp_num)+"_FOV"+str(FOV)+"_"+"0"*((len(str(scan_num))-3)*-1)+str(scan_num)+".h5"
+        fname = get_filename(sample_tag, layer_tag)
+
         f = h5py.File(os.path.join(data_path, fname), 'r')
         projs = np.asarray(f['exchange/data'][:])
         theta = np.radians(np.asarray(f['exchange/theta'][:]))%(2*np.pi)
@@ -97,7 +130,7 @@ def read_raw_data_1X(sample_tag, layer_tag, csv_path = save_path):
 
     return projs, theta, center, dark, flat
 
-def adj_csv_file(sample_tag_list, layer_tag_list, csv_path = save_path):
+def adj_csv_file(sample_tag_list, layer_tag_list):
     '''
     The function reads adjusts the csv data file by reading the projection data and copying it into the csv file. 
     
@@ -112,7 +145,7 @@ def adj_csv_file(sample_tag_list, layer_tag_list, csv_path = save_path):
     return fname
     '''
 
-    rdf = pd.read_csv(csv_path)
+    rdf = pd.read_csv("/data01/Eaton_Polymer_AM/csv_files/data_map_1X.csv")
     sample_pitch = []
     sample_roll = []
     sample_rotary = []
@@ -138,7 +171,7 @@ def adj_csv_file(sample_tag_list, layer_tag_list, csv_path = save_path):
     rdf['sample_x_cent'] = sample_x_cent
     rdf['sample_y'] = sample_y
     rdf['sample_z_cent'] = sample_z_cent
-    rdf.to_csv(csv_path, index=False)
+    rdf.to_csv("/data01/Eaton_Polymer_AM/csv_files/data_map_1X.csv", index=False)
     return
 
 
@@ -148,23 +181,23 @@ def test():
     
     
     #Test case
-    rdf = pd.read_csv(save_path)
+    rdf = pd.read_csv("/data01/Eaton_Polymer_AM/csv_files/data_map_1X.csv")
     sample_tag_list = rdf["sample_num"]
     layer_tag_list = rdf["layer"]
     adj_csv_file(sample_tag_list, layer_tag_list)
 
     #Testing files
-    rdf = pd.read_csv(save_path)
-    sample_tag_list = rdf["sample_num"]
-    layer_tag_list = rdf["layer"]
+    # rdf = pd.read_csv("/data01/Eaton_Polymer_AM/csv_files/data_map_1X.csv")
+    # sample_tag_list = rdf["sample_num"]
+    # layer_tag_list = rdf["layer"]
 
-    for i in range(len(sample_tag_list)):
-        projs, theta, center, dark, flat = read_raw_data_1X(str(sample_tag_list[i]),str(layer_tag_list[i]))
-        print("Sample #:", sample_tag_list[i], "Layer #:", layer_tag_list[i], "Shape:", str(projs.shape))
-        print(f'max theta: {theta.max():.2f}, min theta: {theta.min():.2f}')
-        print(f'max proj: {projs.max():.2f}, min proj: {projs.min():.2f}')
-        print("proj data type:", projs.dtype)
-    return
+    # for i in range(len(sample_tag_list)):
+    #     projs, theta, center, dark, flat = read_raw_data_1X(str(sample_tag_list[i]),str(layer_tag_list[i]))
+    #     print("Sample #:", sample_tag_list[i], "Layer #:", layer_tag_list[i], "Shape:", str(projs.shape))
+    #     print(f'max theta: {theta.max():.2f}, min theta: {theta.min():.2f}')
+    #     print(f'max proj: {projs.max():.2f}, min proj: {projs.min():.2f}')
+    #     print("proj data type:", projs.dtype)
+    # return
 
 if __name__ == "__main__":
 

@@ -6,9 +6,12 @@ import cupy as cp
 import numpy as np
 from tomo2mesh.projects.eaton.params import *
 import numexpr as ne
+import tqdm
 
+# typical for 2-BM pink beam
+# pg_dict_default = {"alpha" : 0.00005, "energy" : 30.0, "detector_dist_cm" : 15.0, "pixel_size_um" : 3.13, "pg_pad" : 10}
 
-def preprocess(data, dark, flat, pixel_size_cm, apply_pg = True, outlier_removal = False):
+def preprocess(data, dark, flat, outlier_removal = False, pg_dict = None):
     
     data = (data-dark)/(cp.maximum(flat-dark, 1.0e-6))                
     
@@ -17,16 +20,19 @@ def preprocess(data, dark, flat, pixel_size_cm, apply_pg = True, outlier_removal
         ids = cp.where(cp.abs(fdata-data)>0.5*cp.abs(fdata))
         data[ids] = fdata[ids]        
     
-    if apply_pg:
-        data[:] = paganin_filter(data, alpha = pg_alpha, energy = energy, pixel_size = pixel_size_cm, dist = detector_dist)
+    if pg_dict is not None:
+        data[:] = paganin_filter(data, alpha = pg_dict["alpha"], \
+                                 energy = pg_dict["energy"], \
+                                 pixel_size = pg_dict["pixel_size_um"]*1.0e-4,\
+                                 dist = detector_dist)
 
     data[:] = -cp.log(cp.maximum(data,1.0e-6))
-    
     return data
 
-def recon_slice(projs, theta, center, dark, flat, sino_pos, pixel_size, pg_pad = 10):
+def recon_slice(projs, theta, center, dark, flat, sino_pos, pg_dict = None):
 
     ntheta, nz, n = projs.shape
+    pg_pad = 0 if pg_dict is None else pg_dict["pg_pad"]
     
     if type(sino_pos) is float:
         sino_pos = int(sino_pos*nz)
@@ -51,7 +57,7 @@ def recon_slice(projs, theta, center, dark, flat, sino_pos, pixel_size, pg_pad =
 
         print(f"data shape: (ntheta, nz, n) {data.shape}")
         # dark-flat correction, phase retrieval
-        data[:] = preprocess(data, dark, flat, pixel_size*1.0e-4, apply_pg=True if pg_pad > 0 else False)
+        data[:] = preprocess(data, dark, flat, pg_dict = pg_dict)
         fbp_filter(data)
         rec_all(obj_gpu, data, theta, center)
 
@@ -59,9 +65,11 @@ def recon_slice(projs, theta, center, dark, flat, sino_pos, pixel_size, pg_pad =
     
     return obj_gpu.get()[pg_pad,...]
 
-import tqdm
-def recon_all(projs, theta, center, nc, dark, flat, pixel_size, outlier_removal = False, pg_pad = 8):
 
+def recon_all(projs, theta, center, nc, dark, flat, outlier_removal = False, pg_dict = None):
+
+
+    pg_pad = 0 if pg_dict is None else pg_dict["pg_pad"]
     stream = cp.cuda.Stream()
     with stream:
         ntheta, nz, n = projs.shape
@@ -79,13 +87,13 @@ def recon_all(projs, theta, center, nc, dark, flat, pixel_size, outlier_removal 
         
         if ic == 0:
             s_in = slice(ic*nc, (ic+1)*nc+pg_pad)
-            s_out = slice(None, -pg_pad)
+            s_out = slice(None, -pg_pad or None)
         elif ic == int(np.ceil(nz/nc))-1:
             s_in = slice(ic*nc-pg_pad, (ic+1)*nc)
-            s_out = slice(pg_pad, None)
+            s_out = slice(pg_pad or None, None)
         else:
             s_in = slice(ic*nc-pg_pad, (ic+1)*nc+pg_pad)
-            s_out = slice(pg_pad,-pg_pad)
+            s_out = slice(pg_pad or None,-pg_pad or None)
         s_chunk = slice(ic*nc, (ic+1)*nc)
 
         # dark-flat correction, phase retrieval
@@ -93,7 +101,7 @@ def recon_all(projs, theta, center, nc, dark, flat, pixel_size, outlier_removal 
         with stream:
             
             data[:] = preprocess(cp.array(projs[:,s_in,:].astype(np.float32), dtype = cp.float32), \
-                                 dark[s_in], flat[s_in], pixel_size*1.0e-4, outlier_removal = outlier_removal)[:,s_out,:]
+                                 dark[s_in], flat[s_in], outlier_removal = outlier_removal, pg_dict = pg_dict)[:,s_out,:]
             fbp_filter(data)
             rec_all(obj_gpu, data, theta, center)
             obj_gpu[:] = ndimage.gaussian_filter(obj_gpu, 0.5)
@@ -126,8 +134,10 @@ def bin_projections(data, b):
     return data.astype(np.uint16)
 
 
-def recon_binned(projs, theta, center, dark, flat, b, pixel_size):
+def recon_binned(projs, theta, center, dark, flat, b, pg_dict = None):
     
+
+    assert projs.dtype == np.uint8, "projection data must be 8-bit for this to work"
     # projs = bin_projections(projs, b)
     # nz, n = dark.shape
     # dark = np.mean(dark.reshape(nz//b, b, n//b, b), axis = (1,3))
@@ -153,7 +163,7 @@ def recon_binned(projs, theta, center, dark, flat, b, pixel_size):
 
         # dark-flat correction, phase retrieval
         
-        data[:] = preprocess(data, dark, flat, pixel_size*1.0e-4*b, outlier_removal=False)
+        data[:] = preprocess(data, dark, flat, outlier_removal=False, pg_dict = pg_dict)
         fbp_filter(data)
         ntheta, nz, n = data.shape
         obj_gpu = cp.empty((nz,n,n), dtype = cp.float32)

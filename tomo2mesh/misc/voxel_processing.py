@@ -194,6 +194,8 @@ def modified_autocontrast(vol, s = 0.01, normalize_sampling_factor = 2):
         intensity_vals = vol[:, sbin, sbin, sbin].reshape(-1)
     elif vol.ndim == 3:
         intensity_vals = vol[sbin, sbin, sbin].reshape(-1)
+    elif vol.ndim == 2:
+        intensity_vals = vol[sbin,sbin].reshape(-1)
     elif vol.ndim == 1:
         intensity_vals = vol
     

@@ -22,6 +22,8 @@ import functools
 from multiprocessing import Pool, cpu_count
 import cc3d
 import pandas as pd
+from tomo2mesh.structures.datafile import Parallelize
+
 
 class Surface(dict):
     def __init__(self, vertices, faces, texture = None):
@@ -139,6 +141,40 @@ class Voids(dict):
         return
 
 
+    def write_measurements(self, fpath):
+
+        # write void meta data to hdf5
+        with h5py.File(os.path.join(fpath, "meta.hdf5"), 'w') as hf:
+            hf.create_dataset("vol_shape", data = self.vol_shape)
+            hf.create_dataset("b", data = self.b)
+            hf.create_dataset("sizes", data = self["sizes"])
+            hf.create_dataset("cents", data = self["cents"])
+            hf.create_dataset("cpts", data = self["cpts"])
+            s = []
+            for s_void in self["s_voids"]:
+                sz, sy, sx = s_void
+                s.append([sz.start, sz.stop, sy.start, sy.stop, sx.start, sx.stop])
+            hf.create_dataset("s_voids", data = np.asarray(s))
+            if np.any(self["x_boundary"]):
+                hf.create_dataset("x_boundary", data = np.asarray(self["x_boundary"]))
+
+            if "max_feret" in self.keys():
+                hf.create_dataset("max_feret/dia", data = self["max_feret"]["dia"])
+                hf.create_dataset("max_feret/eq_sph", data = self["max_feret"]["eq_sph"])
+                hf.create_dataset("max_feret/norm_dia", data = self["max_feret"]["norm_dia"])
+                hf.create_dataset("max_feret/theta", data = self["max_feret"]["theta"])
+                hf.create_dataset("max_feret/phi", data = self["max_feret"]["phi"])
+                hf.create_dataset("max_feret/cross_dia", data = self["max_feret"]["cross_dia"])
+
+            if "number_density" in self.keys():
+                hf.create_dataset("number_density", data = self["number_density"])
+
+            if "outlier_labels" in self.keys():
+                hf.create_dataset("outlier_labels", data = self["outlier_labels"])
+        return
+
+
+
     def write_to_disk(self, fpath, overwrite = True):
 
         '''write voids data to disk.'''
@@ -178,10 +214,15 @@ class Voids(dict):
                 hf.create_dataset("max_feret/norm_dia", data = self["max_feret"]["norm_dia"])
                 hf.create_dataset("max_feret/theta", data = self["max_feret"]["theta"])
                 hf.create_dataset("max_feret/phi", data = self["max_feret"]["phi"])
+                hf.create_dataset("max_feret/cross_dia", data = self["max_feret"]["cross_dia"])
+                
 
             if "number_density" in self.keys():
                 hf.create_dataset("number_density", data = self["number_density"])
             
+            if "outlier_labels" in self.keys():
+                hf.create_dataset("outlier_labels", data = self["outlier_labels"])
+
         # # write ply mesh of each void into folder (if available)
         # if np.any(self["surfaces"]):
         #     surf_dir = os.path.join(fpath, "mesh")
@@ -193,8 +234,9 @@ class Voids(dict):
         #             "void_id_" + void_id_str + ".ply"), void)
         return
     
-    def import_from_disk(self, fpath):
-
+    def import_from_disk(self, fpath, pool_context = "fork"):
+        timer = TimerCPU("secs")
+        timer.tic()
         import glob
         assert os.path.exists(fpath), "path not found to import voids data from"
         with h5py.File(os.path.join(fpath, "meta.hdf5"), 'r') as hf:
@@ -221,17 +263,22 @@ class Voids(dict):
                 self["max_feret"]["norm_dia"] = np.asarray(hf["max_feret/norm_dia"])
                 self["max_feret"]["theta"] = np.asarray(hf["max_feret/theta"])
                 self["max_feret"]["phi"] = np.asarray(hf["max_feret/phi"])
+                if "cross_dia" in hf["max_feret"].keys():
+                    self["max_feret"]["cross_dia"] = np.asarray(hf["max_feret/cross_dia"])
 
             if "number_density" in hf.keys():
                 self['number_density'] = np.asarray(hf["number_density"])
 
+            if "outlier_labels" in hf.keys():
+                self["outlier_labels"] = np.asarray(hf["outlier_labels"])
 
 
         flist = sorted(glob.glob(os.path.join(fpath,"voids", "*.tiff")))
-        self["x_voids"] = []
-        for f_ in flist:
-            self["x_voids"].append(imread(f_))
-
+        self["x_voids"] = Parallelize(flist, imread, procs = cpu_count(), pool_context = pool_context)
+        # self["x_voids"] = []
+        # for f_ in flist:
+        #     self["x_voids"].append(imread(f_))
+        timer.toc("importing voids data from disk")
         return self
 
 
@@ -257,9 +304,14 @@ class Voids(dict):
                 self["max_feret"]["norm_dia"] = np.asarray(hf["max_feret/norm_dia"])
                 self["max_feret"]["theta"] = np.asarray(hf["max_feret/theta"])
                 self["max_feret"]["phi"] = np.asarray(hf["max_feret/phi"])
+                self["max_feret"]["cross_dia"] = np.asarray(hf["max_feret/cross_dia"])
 
             if "number_density" in hf.keys():
                 self['number_density'] = np.asarray(hf["number_density"])
+
+            if "outlier_labels" in hf.keys():
+                self["outlier_labels"] = np.asarray(hf["outlier_labels"])
+
 
             self["x_voids"] = None
             self["x_boundary"] = None
@@ -465,12 +517,13 @@ class Voids(dict):
             self["max_feret"]["norm_dia"] = self["max_feret"]["norm_dia"][idxs]
             self["max_feret"]["theta"] = self["max_feret"]["theta"][idxs]
             self["max_feret"]["phi"] = self["max_feret"]["phi"][idxs]
+            self["max_feret"]["cross_dia"] = self["max_feret"]["cross_dia"][idxs]
         
         if "number_density" in self.keys():
-            try:
-                self["number_density"] = self["number_density"][idxs]
-            except:
-                import pdb; pdb.set_trace()
+            self["number_density"] = self["number_density"][idxs]
+
+        if "outlier_labels" in self.keys():
+            self["outlier_labels"] = self["outlier_labels"][idxs]
 
         print(f"\tSTAT: number of voids selected - {len(self['sizes'])}")
         return
@@ -599,7 +652,7 @@ class Voids(dict):
             r = 0; g = 0; b = 255
         return r, g, b
     
-    def export_void_mesh_mproc(self, texture_key, edge_thresh = 1.0, preserve_feature = False, nprocs = None, pool_context = "fork"):
+    def export_void_mesh_mproc(self, texture_key, edge_thresh = 1.0, preserve_feature = False, nprocs = None, pool_context = "fork", normalize_texture_flag = True):
 
         '''export with texture, slower but vis with color coding
         '''
@@ -609,9 +662,23 @@ class Voids(dict):
         if texture_key == "sizes":
             tex_vals = np.empty((len(self),3))
             tex_vals[:,0] = np.log(self["sizes"]+1.0e-12) #255 #void_id
-            tex_vals[:,1] = 255
+            tex_vals[:,1] = np.cbrt(self["sizes"])
             tex_vals[:,2] = 255
             
+        elif texture_key == "outlier_labels":
+            tex_vals = np.empty((len(self),3))
+            tex_vals[:,0] = self["outlier_labels"].copy()
+            tex_vals[:,1] = 255
+            tex_vals[:,2] = self["max_feret"]["norm_dia"].copy()
+            
+        elif "morpho" in texture_key:
+            if "max_feret" not in self.keys():
+                self.calc_max_feret_dm()            
+            tex_vals = np.empty((len(self),3))
+            tex_vals[:,0] = self["max_feret"]["cross_dia"].copy()
+            tex_vals[:,1] = self["max_feret"]["dia"].copy()            
+            tex_vals[:,2] = self["max_feret"]["norm_dia"].copy()
+                    
         elif "distance" in texture_key:
             raise ValueError("not implemented")
 
@@ -633,22 +700,37 @@ class Voids(dict):
 
         # remove empty voids (originating from those misclassified in coarse step)
         surf = void2mesh_mproc(self["x_voids"], self["cpts"], tex_vals, edge_thresh, self.b, preserve_feature, nprocs, pool_context)
+
+        if normalize_texture_flag:
+            surf = normalize_texture(surf)
         time = timer.toc(f"compute void mesh")
         
         return surf
 
 
-    def calc_max_feret_dm(self):
+    def calc_max_feret_dm(self, nprocs = None, pool_context = "fork"):
 
+        # multiprocess
+        if nprocs is None:
+            nprocs = cpu_count()
         timer = TimerCPU("secs")
         timer.tic()
-        arr = np.asarray([list(max_feret_dm(self["x_voids"][iv])) for iv in range(len(self))])
+        # arr = np.asarray([list(max_feret_dm(self["x_voids"][iv])) for iv in range(len(self))])
+
+        from multiprocessing import get_context
+        with get_context(pool_context).Pool(processes = nprocs) as pool:
+            arr = pool.map(max_feret_dm, self["x_voids"])
+            pool.close()
+            pool.join()
+        arr = np.asarray(arr)
+
         self["max_feret"] = {}
         self["max_feret"]["dia"] = arr[:,0]
         self["max_feret"]["eq_sph"] = arr[:,3]
         self["max_feret"]["norm_dia"] = arr[:,4]
         self["max_feret"]["theta"] = arr[:,1]
         self["max_feret"]["phi"] = arr[:,2]
+        self["max_feret"]["cross_dia"] = arr[:,5]
         timer.toc("calculate max feret diameter")
         return
 
@@ -659,6 +741,20 @@ class Voids(dict):
         self['number_density'] = np.asarray(arr)
         timer.toc("calculate number density")
         return
+
+
+def normalize_texture(surf):
+    texture = surf["texture"]
+    for i3 in range(3):
+        color = texture[:,i3]
+        min_val = color.min()
+        max_val = color.max()
+        if max_val > min_val:
+            texture[:,i3] = 255*(color - min_val)/(max_val - min_val)
+        else:
+            texture[:,i3] = 255
+    surf["texture"] = texture.astype(np.uint8)
+    return surf
 
 def void2mesh_mproc(x_voids, cpts, tex_vals, edge_thresh, b, preserve_feature, nprocs, pool_context):
 
@@ -695,22 +791,9 @@ def void2mesh_mproc(x_voids, cpts, tex_vals, edge_thresh, b, preserve_feature, n
         texture.append(tex)
         id_len = id_len + len(vx)
 
-
-    # normalize colormap
-    texture = np.concatenate(texture, axis = 0)
-    for i3 in range(3):
-        color = texture[:,i3]
-        min_val = color.min()
-        max_val = color.max()
-        if max_val > min_val:
-            texture[:,i3] = 255*(color - min_val)/(max_val - min_val)
-        else:
-            texture[:,i3] = 255
-
-
     surf = Surface(np.concatenate(verts, axis = 0), \
                     np.concatenate(faces, axis = 0), \
-                    texture = texture.astype(np.uint8))
+                    texture = np.concatenate(texture, axis = 0))
     
     return surf
 

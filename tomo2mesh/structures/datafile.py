@@ -582,7 +582,7 @@ def write_tiffseq(S, SaveDir = "", increment_flag = False,\
     
     return
     
-def Parallelize(ListIn, f, procs = -1, **kwargs):
+def Parallelize(ListIn, f, procs = -1, pool_context = "fork", **kwargs):
     
     """This function packages the "starmap" function in multiprocessing, to allow multiple iterable inputs for the parallelized function.  
     
@@ -617,13 +617,17 @@ def Parallelize(ListIn, f, procs = -1, **kwargs):
 
     if procs == 1:
         OutList = [reduced_argfunc(*ListIn[iS]) for iS in range(len(ListIn))]
-    else:
-        p = Pool(processes = procs)
-        OutList = p.starmap(reduced_argfunc, ListIn)
-        p.close()
-        p.join()
+        return OutList
     
+    from multiprocessing import get_context
+    with get_context(pool_context).Pool(processes = procs) as pool:
+        OutList = pool.starmap(reduced_argfunc, ListIn)
+        pool.close()
+        pool.join()
     return OutList
+
+
+    
    
 def show_header():
     print("\n" + "#"*60 + "\n")
