@@ -28,14 +28,14 @@ model_names = {"segmenter" : "segmenter_Unet_%s"%model_tag}
 
 
 ## file names
-raw_fname = os.path.join(base_fpath, 'mosaic_raw/all_layers_16bit.hdf5')
-raw_fname_b2 = os.path.join(base_fpath, 'mosaic_raw/all_layers_b2_16bit.hdf5')
+raw_fname = os.path.join(base_fpath, 'raw_data/all_layers_16bit.hdf5')
+raw_fname_b2 = os.path.join(base_fpath, 'raw_data/all_layers_b2_16bit.hdf5')
 voids_dir = os.path.join(base_fpath,'voids_data')
 data_output = os.path.join(base_fpath, 'output_vis')
 time_logs = os.path.join(base_fpath,'time_logs')
 ply_dir = os.path.join(base_fpath, 'ply')
 rec_dir = os.path.join(base_fpath, 'full_rec')
-model_path = os.path.join(base_fpath, 'models_unet')
+model_path = os.path.join(base_fpath, 'models')
 
 if not os.path.exists(time_logs):
     os.makedirs(time_logs)

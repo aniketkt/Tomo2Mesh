@@ -17,7 +17,7 @@ The importable files that provide an API for reconstruction, segmentation and me
   <img width="800" src="images/illustration.png">  
 </p>  
 
-For more information on the algorithms and performance measurements of the code, please read the pre-print of our [paper](https://github.com/aniketkt/Tomo2Mesh/blob/main/images/paper.pdf).
+For more information on the algorithms and performance measurements of the code, please read the pre-print of our [paper](https://www.techrxiv.org/articles/preprint/Real-time_porosity_mapping_and_visualization_for_synchrotron_tomography/20369421).
 
 
 ## Developers  
