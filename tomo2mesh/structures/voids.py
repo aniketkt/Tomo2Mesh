@@ -143,6 +143,9 @@ class Voids(dict):
 
     def write_measurements(self, fpath):
 
+        if not os.path.exists(fpath):
+            os.makedirs(fpath)
+
         # write void meta data to hdf5
         with h5py.File(os.path.join(fpath, "meta.hdf5"), 'w') as hf:
             hf.create_dataset("vol_shape", data = self.vol_shape)
